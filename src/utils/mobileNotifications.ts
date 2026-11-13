@@ -6,6 +6,8 @@ export interface MobilePushPayload {
   tab?: 'room' | 'friends' | 'library' | 'leaderboard';
 }
 
+const BASE_URL = import.meta.env.BASE_URL || '/';
+
 let registeredSwPromise: Promise<ServiceWorkerRegistration | null> | null = null;
 
 export function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
@@ -14,7 +16,7 @@ export function registerServiceWorker(): Promise<ServiceWorkerRegistration | nul
   }
   if (!registeredSwPromise) {
     registeredSwPromise = navigator.serviceWorker
-      .register('/sw.js', { scope: '/' })
+      .register(`${BASE_URL}sw.js`, { scope: BASE_URL })
       .then((reg) => reg)
       .catch((err) => {
         console.warn('Service worker registration skipped:', err);
@@ -85,16 +87,16 @@ export async function sendMobilePushNotification(
   }
 
   const targetUrl = payload.roomCode
-    ? `/?oda=${encodeURIComponent(payload.roomCode)}`
-    : '/';
+    ? `${BASE_URL}?oda=${encodeURIComponent(payload.roomCode)}`
+    : BASE_URL;
 
   const notifOptions: NotificationOptions & {
     renotify?: boolean;
     vibrate?: number[];
   } = {
     body: payload.body,
-    icon: '/pwa-192x192.png',
-    badge: '/pwa-192x192.png',
+    icon: `${BASE_URL}pwa-192x192.png`,
+    badge: `${BASE_URL}pwa-192x192.png`,
     tag: payload.tag || `dilbaz_${Date.now()}`,
     renotify: true,
     vibrate: [180, 80, 220],
@@ -124,7 +126,7 @@ export async function sendMobilePushNotification(
   try {
     const n = new Notification(payload.title, {
       body: payload.body,
-      icon: '/pwa-192x192.png',
+      icon: `${BASE_URL}pwa-192x192.png`,
       tag: notifOptions.tag
     });
     n.onclick = () => {

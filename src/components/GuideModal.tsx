@@ -25,7 +25,7 @@ export const GuideModal: React.FC<GuideModalProps> = ({ isOpen, onClose }) => {
         <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-[#0d1629]/70">
           <div className="flex items-center gap-3">
             <img
-              src="/assets/aistudio/logo_785c16ab.png"
+              src={`${import.meta.env.BASE_URL}assets/aistudio/logo_785c16ab.png`}
               alt="Dilbaz"
               className="w-9 h-9 rounded-full object-cover ring-2 ring-[#FFBE0B]/60"
             />

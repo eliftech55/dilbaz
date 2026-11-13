@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User } from 'firebase/auth';
 import { UserProfile } from '../types/game';
 import { KilimAvatar } from './KilimAvatar';
+import { PWAInstallButton } from './PWAInstallButton';
 import { playTone } from '../utils/soundEffects';
 import {
   Smartphone,
@@ -80,7 +81,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           <div className="relative w-8 h-8 sm:w-10 sm:h-10 rounded-full p-[2px] bg-gradient-to-tr from-[#3A86FF] via-[#FF006E] to-[#FFBE0B] shadow-lg shadow-[#FF006E]/25 shrink-0">
             <img
-              src="/assets/aistudio/logo_785c16ab.png"
+              src={`${import.meta.env.BASE_URL}assets/aistudio/logo_785c16ab.png`}
               alt="Dilbaz Logo"
               className="w-full h-full rounded-full object-cover bg-[#14213D]"
             />
@@ -234,6 +235,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden sm:inline">Giriş / Kayıt</span>
             </button>
           )}
+
+          {/* PWA Install Button (hidden when standalone/already installed) */}
+          <div className="hidden sm:block">
+            <PWAInstallButton compact />
+          </div>
 
           {/* Replay Intro Video (xl+) */}
           <button
@@ -448,6 +454,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </button>
             )}
+
+            <div className="sm:col-span-2">
+              <PWAInstallButton onInstalledOrClicked={() => setMobileMenuOpen(false)} />
+            </div>
 
             <div className="grid grid-cols-2 gap-1.5">
               <button

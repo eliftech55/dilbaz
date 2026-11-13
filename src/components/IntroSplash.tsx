@@ -53,7 +53,7 @@ export const IntroSplash: React.FC<IntroSplashProps> = ({ onComplete }) => {
         <div className="px-5 py-3.5 flex items-center justify-between border-b border-white/10 bg-[#0d1629]/80">
           <div className="flex items-center gap-3">
             <img
-              src="/assets/aistudio/logo_785c16ab.png"
+              src={`${import.meta.env.BASE_URL}assets/aistudio/logo_785c16ab.png`}
               alt="Dilbaz Logo"
               className="w-10 h-10 rounded-full object-cover ring-2 ring-[#FFBE0B]/60 shadow-md"
             />
@@ -93,7 +93,7 @@ export const IntroSplash: React.FC<IntroSplashProps> = ({ onComplete }) => {
           {!videoFailed ? (
             <video
               ref={videoRef}
-              src="/assets/aistudio/dilbaz_video_618a6127.mp4"
+              src={`${import.meta.env.BASE_URL}assets/aistudio/dilbaz_video_618a6127.mp4`}
               className="w-full h-full object-cover"
               autoPlay
               playsInline
@@ -106,7 +106,7 @@ export const IntroSplash: React.FC<IntroSplashProps> = ({ onComplete }) => {
               <div className="relative">
                 <div className="absolute -inset-4 rounded-full bg-gradient-to-tr from-[#3A86FF]/40 via-[#FF006E]/30 to-[#FFBE0B]/40 blur-xl animate-pulse-aura" />
                 <img
-                  src="/assets/aistudio/logo_785c16ab.png"
+                  src={`${import.meta.env.BASE_URL}assets/aistudio/logo_785c16ab.png`}
                   alt="Dilbaz Ebru Zümrüdüanka"
                   className="relative w-36 h-36 rounded-full object-cover ring-4 ring-[#FFBE0B]/70 shadow-2xl"
                 />

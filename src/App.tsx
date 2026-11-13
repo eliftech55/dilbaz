@@ -58,6 +58,7 @@ import { GuideModal } from './components/GuideModal';
 import { AddTekerlemeModal } from './components/AddTekerlemeModal';
 import { AuthModal } from './components/AuthModal';
 import { AdminPanel } from './components/AdminPanel';
+import { OfflineIndicator } from './components/PWAInstallButton';
 import { KILIM_MOTIFS, getKilimMotif } from './components/KilimAvatar';
 import { setSoundMuted, playTone } from './utils/soundEffects';
 import {
@@ -1233,6 +1234,8 @@ export default function App() {
         }}
         onSave={handleSaveTekerleme}
       />
+      {/* Offline Connectivity Indicator */}
+      <OfflineIndicator />
     </div>
   );
 }
