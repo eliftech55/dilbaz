@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User } from 'firebase/auth';
 import { UserProfile } from '../types/game';
 import {
@@ -32,6 +32,7 @@ interface AuthModalProps {
   userProfile: UserProfile | null;
   isAdmin: boolean;
   onClose: () => void;
+  onOpenAdminPanel?: () => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -39,7 +40,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   authUser,
   userProfile,
   isAdmin,
-  onClose
+  onClose,
+  onOpenAdminPanel
 }) => {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -58,9 +60,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Password link state (for users who registered via Google and want email+password login too)
   const [newPassword, setNewPassword] = useState('');
   const [isLinkingPassword, setIsLinkingPassword] = useState(false);
+  const wasSignedOutRef = useRef<boolean>(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      wasSignedOutRef.current = false;
+      return;
+    }
+    if (!authUser) {
+      wasSignedOutRef.current = true;
+    }
     setErrorMsg(null);
     setSuccessMsg(null);
     setNeedsConsoleSetup(false);
@@ -76,12 +85,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         const isEmail = Boolean(authUser.email && userProfile.username === authUser.email);
         setUseEmailAsUsername(isEmail);
         setCustomUsername(isEmail ? '' : userProfile.username);
+
+        if (wasSignedOutRef.current) {
+          wasSignedOutRef.current = false;
+          setSuccessMsg(`Giriş başarılı! Hoş geldiniz, ${userProfile.username}.`);
+          const timer = setTimeout(() => {
+            onClose();
+          }, 700);
+          return () => clearTimeout(timer);
+        }
       } else {
-        setUseEmailAsUsername(Boolean(authUser.email));
-        setCustomUsername('');
+        const suggested = authUser.displayName?.trim() || '';
+        setUseEmailAsUsername(!suggested && Boolean(authUser.email));
+        setCustomUsername(suggested);
       }
     }
-  }, [isOpen, authUser, userProfile]);
+  }, [isOpen, authUser, userProfile, onClose]);
 
   useEffect(() => {
     if (!isOpen || !authUser || useEmailAsUsername) {
@@ -311,6 +330,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </svg>
                 <span>Google Hesabı ile Kayıt Ol / Giriş Yap</span>
               </button>
+              <p className="text-[11px] text-[#94A3B8] text-center -mt-3">
+                Tarayıcı açılır pencereyi (popup) engellerse adres çubuğundan izin verin veya aşağıdan e-posta ve şifre ile giriş yapın.
+              </p>
 
               <div className="flex items-center gap-3">
                 <div className="h-px flex-1 bg-white/10" />
@@ -415,7 +437,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-bold text-white truncate">
-                        {userProfile?.username || authUser.email || 'Yeni Üye'}
+                        {userProfile?.username ||
+                          authUser.displayName ||
+                          authUser.email?.split('@')[0] ||
+                          'Yeni Üye'}
                       </span>
                       {isAdmin && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFBE0B]/20 border border-[#FFBE0B]/50 text-[#FFBE0B] text-[10px] font-bold">
@@ -434,6 +459,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {isAdmin && onOpenAdminPanel && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTone('tap');
+                    onOpenAdminPanel();
+                    onClose();
+                  }}
+                  className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#FFBE0B] to-[#F59E0B] text-[#0d1629] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Yönetici Panelini Aç (Üyeler & Onaylar)</span>
+                </button>
+              )}
+
+              {!userProfile && (
+                <div className="p-3 rounded-2xl bg-[#00F5D4]/12 border border-[#00F5D4]/40 text-[11px] text-[#CFFAFE] leading-relaxed">
+                  <strong>Son adım:</strong> Kullanıcı adınızın üst menüde, liderlik panosunda ve yönetici üye listesinde görünmesi için aşağıdan seçiminizi yapıp <strong>PROFİLİ KAYDET</strong> butonuna basın.
+                </div>
+              )}
 
               {/* Username Selection Form */}
               <form onSubmit={handleSaveProfile} className="space-y-4">

@@ -28,13 +28,15 @@ interface GlobalLeaderboardProps {
   currentUserProfile?: UserProfile | null;
   isAdmin?: boolean;
   onOpenAuth: () => void;
+  onOpenAdminPanel?: () => void;
 }
 
 export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
   currentUid,
   currentUserProfile = null,
   isAdmin = false,
-  onOpenAuth
+  onOpenAuth,
+  onOpenAdminPanel
 }) => {
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [allMembers, setAllMembers] = useState<UserProfile[]>([]);
@@ -126,18 +128,34 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
             </p>
           </div>
 
-          {!currentUid && (
-            <button
-              onClick={() => {
-                playTone('tap');
-                onOpenAuth();
-              }}
-              className="px-4 py-3 rounded-2xl btn-epic-pomegranate font-bold text-xs flex items-center gap-2 shrink-0 cursor-pointer"
-            >
-              <UserCheck className="w-4 h-4" />
-              <span>Giriş Yap & Puan Topla</span>
-            </button>
-          )}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {isAdmin && onOpenAdminPanel && (
+              <button
+                type="button"
+                onClick={() => {
+                  playTone('tap');
+                  onOpenAdminPanel();
+                }}
+                className="px-4 py-2.5 rounded-2xl bg-[#FFBE0B]/20 hover:bg-[#FFBE0B]/30 border border-[#FFBE0B]/50 text-[#FFBE0B] font-bold text-xs flex items-center gap-2 cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>Yönetim Panelini Aç (Üyeler)</span>
+              </button>
+            )}
+
+            {!currentUid && (
+              <button
+                onClick={() => {
+                  playTone('tap');
+                  onOpenAuth();
+                }}
+                className="px-4 py-3 rounded-2xl btn-epic-pomegranate font-bold text-xs flex items-center gap-2 shrink-0 cursor-pointer"
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>Giriş Yap & Puan Topla</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Point Rules Strip */}

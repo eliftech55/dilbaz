@@ -77,6 +77,32 @@ export async function checkIsAdmin(user: User | null): Promise<boolean> {
   }
 }
 
+export async function ensureBootstrapAdminRecord(user: User): Promise<void> {
+  if (user.email !== ADMIN_EMAIL || !user.emailVerified) return;
+  const now = Date.now();
+  try {
+    const adminRef = doc(db, 'admins', user.uid);
+    const adminSnap = await getDoc(adminRef);
+    if (!adminSnap.exists()) {
+      await setDoc(adminRef, {
+        uid: user.uid,
+        promotedBy: user.uid,
+        createdAt: now
+      });
+    }
+    const profileRef = doc(db, 'publicProfiles', user.uid);
+    const profileSnap = await getDoc(profileRef);
+    if (profileSnap.exists() && profileSnap.data().role !== 'yonetici') {
+      await updateDoc(profileRef, {
+        role: 'yonetici',
+        updatedAt: now
+      });
+    }
+  } catch (err) {
+    console.warn('Bootstrap admin sync warning:', err);
+  }
+}
+
 export async function signInWithGoogle(): Promise<User | null> {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
@@ -260,7 +286,9 @@ export async function saveUserProfile(params: {
   }
 
   const isBootstrapAdmin = user.email === ADMIN_EMAIL && user.emailVerified;
-  const resolvedRole: UserRole = existingProfile?.role || (isBootstrapAdmin ? 'yonetici' : 'uye');
+  const resolvedRole: UserRole = isBootstrapAdmin
+    ? 'yonetici'
+    : existingProfile?.role || 'uye';
 
   const profilePayload: UserProfile = {
     uid: user.uid,
@@ -279,6 +307,7 @@ export async function saveUserProfile(params: {
     batch.update(profileRef, {
       username: finalUsername,
       avatar: chosenAvatar,
+      ...(isBootstrapAdmin ? { role: 'yonetici' } : {}),
       updatedAt: now
     });
   } else {
@@ -368,7 +397,8 @@ export function subscribeToGlobalLeaderboard(
  * Admin: Stream all registered members ordered by creation time.
  */
 export function subscribeToAllMembers(
-  onUpdate: (profiles: UserProfile[]) => void
+  onUpdate: (profiles: UserProfile[]) => void,
+  onError?: (err: unknown) => void
 ): () => void {
   const q = query(collection(db, 'publicProfiles'), orderBy('createdAt', 'desc'), limit(200));
   return onSnapshot(
@@ -377,7 +407,8 @@ export function subscribeToAllMembers(
       onUpdate(snap.docs.map((d) => d.data() as UserProfile));
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'publicProfiles');
+      console.warn('Admin members stream warning:', error);
+      onError?.(error);
     }
   );
 }

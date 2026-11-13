@@ -20,6 +20,7 @@ import {
   markNotificationRead,
   deleteNotification,
   checkIsAdmin,
+  ensureBootstrapAdminRecord,
   consumeGoogleRedirectResult
 } from './firebase/authService';
 import {
@@ -56,6 +57,7 @@ import { FriendsPanel } from './components/FriendsPanel';
 import { GuideModal } from './components/GuideModal';
 import { AddTekerlemeModal } from './components/AddTekerlemeModal';
 import { AuthModal } from './components/AuthModal';
+import { AdminPanel } from './components/AdminPanel';
 import { KILIM_MOTIFS, getKilimMotif } from './components/KilimAvatar';
 import { setSoundMuted, playTone } from './utils/soundEffects';
 import {
@@ -63,7 +65,7 @@ import {
   sendMobilePushNotification,
   subscribeToNotificationClicks
 } from './utils/mobileNotifications';
-import { Users, Mic, BookOpen, Trophy, Bell, X, UserPlus, Swords } from 'lucide-react';
+import { Users, Mic, BookOpen, Trophy, Bell, X, UserPlus, Swords, UserCheck } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('room');
@@ -199,7 +201,11 @@ export default function App() {
     if (authUser) {
       return {
         id: authUser.uid,
-        name: userProfile?.username || authUser.email?.split('@')[0] || guestUser.name,
+        name:
+          userProfile?.username ||
+          authUser.displayName ||
+          authUser.email?.split('@')[0] ||
+          guestUser.name,
         avatar:
           userProfile?.avatar && getKilimMotif(userProfile.avatar)
             ? userProfile.avatar
@@ -256,6 +262,9 @@ export default function App() {
       setProfileLoaded(false);
       const adminFlag = await checkIsAdmin(user);
       setIsAdmin(adminFlag);
+      if (adminFlag) {
+        ensureBootstrapAdminRecord(user);
+      }
 
       unsubProfile = subscribeToUserProfile(user.uid, (profile) => {
         setUserProfile(profile);
@@ -730,7 +739,13 @@ export default function App() {
       }
       return;
     }
-    if (tab === 'friends' || tab === 'room' || tab === 'library' || tab === 'leaderboard') {
+    if (
+      tab === 'friends' ||
+      tab === 'room' ||
+      tab === 'library' ||
+      tab === 'leaderboard' ||
+      tab === 'admin'
+    ) {
       setActiveTab(tab);
     }
   };
@@ -754,6 +769,10 @@ export default function App() {
     [friendships, authUser]
   );
   const pendingFriendsBadgeCount = incomingFriendRequestsCount + pendingRoomInvites.length;
+  const pendingAdminCount = useMemo(
+    () => adminContributions.filter((t) => t.status === 'pending').length,
+    [adminContributions]
+  );
 
   const acceptedFriendsSummary = useMemo(() => {
     if (!authUser) return [];
@@ -796,6 +815,7 @@ export default function App() {
           onOpenGuide={() => setIsGuideOpen(true)}
           pointsCount={userProfile?.points ?? 0}
           pendingFriendsCount={pendingFriendsBadgeCount}
+          pendingAdminCount={pendingAdminCount}
           isMuted={isMuted}
           onToggleMute={handleToggleMute}
           onReplayIntro={() => setShowIntro(true)}
@@ -805,6 +825,30 @@ export default function App() {
           onOpenAuth={() => setIsAuthModalOpen(true)}
         />
       </div>
+
+      {/* Reminder banner when signed in but public profile username is not saved yet */}
+      {authUser && profileLoaded && !userProfile && !isAuthModalOpen && (
+        <div className="relative z-30 max-w-4xl w-full mx-auto px-3 sm:px-4 pt-3">
+          <button
+            type="button"
+            onClick={() => {
+              playTone('tap');
+              setIsAuthModalOpen(true);
+            }}
+            className="w-full p-3 rounded-2xl border border-[#00F5D4]/55 bg-[#00F5D4]/15 hover:bg-[#00F5D4]/22 text-left flex items-center justify-between gap-3 text-xs text-white shadow-md cursor-pointer animate-screen-in"
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <UserCheck className="w-4 h-4 text-[#00F5D4] shrink-0" />
+              <span className="truncate">
+                <strong>Kullanıcı adınız henüz kaydedilmedi</strong> — Liderlik panosu ve oda daveti için profilinizi tamamlayın.
+              </span>
+            </span>
+            <span className="px-3 py-1 rounded-xl bg-[#00F5D4] text-[#0d1629] font-bold shrink-0">
+              Profili Tamamla
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Live Incoming Room Invitation Banner */}
       {authUser && pendingRoomInvites.length > 0 && (
@@ -1038,6 +1082,7 @@ export default function App() {
               onDismissNotification={handleDismissNotification}
               onResetDefaults={handleResetDefaultTekerlemeler}
               onSyncSeedToFirestore={handleSyncSeedToFirestore}
+              onOpenAdminPanel={() => setActiveTab('admin')}
             />
           )}
 
@@ -1064,6 +1109,21 @@ export default function App() {
               currentUserProfile={userProfile}
               isAdmin={isAdmin}
               onOpenAuth={() => setIsAuthModalOpen(true)}
+              onOpenAdminPanel={() => setActiveTab('admin')}
+            />
+          )}
+
+          {/* TAB 6: YÖNETİCİ KULLANICI & İÇERİK YÖNETİM PANELİ */}
+          {activeTab === 'admin' && (
+            <AdminPanel
+              authUser={authUser}
+              currentUid={authUser?.uid || null}
+              isAdmin={isAdmin}
+              adminContributions={adminContributions}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
+              onOpenLibrary={() => setActiveTab('library')}
+              onApproveContribution={approveTekerlemeContribution}
+              onDeleteTekerleme={handleDeleteTekerleme}
             />
           )}
 
@@ -1158,6 +1218,7 @@ export default function App() {
         userProfile={userProfile}
         isAdmin={isAdmin}
         onClose={() => setIsAuthModalOpen(false)}
+        onOpenAdminPanel={() => setActiveTab('admin')}
       />
 
       {/* Add / Edit Tekerleme Modal */}

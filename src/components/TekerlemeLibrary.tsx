@@ -39,6 +39,7 @@ interface TekerlemeLibraryProps {
   onDismissNotification?: (notificationId: string) => void;
   onResetDefaults?: () => void;
   onSyncSeedToFirestore?: () => Promise<{ added: number; skipped: number } | undefined>;
+  onOpenAdminPanel?: () => void;
 }
 
 export const TekerlemeLibrary: React.FC<TekerlemeLibraryProps> = ({
@@ -56,7 +57,8 @@ export const TekerlemeLibrary: React.FC<TekerlemeLibraryProps> = ({
   onApproveContribution,
   onDismissNotification,
   onResetDefaults,
-  onSyncSeedToFirestore
+  onSyncSeedToFirestore,
+  onOpenAdminPanel
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all');
@@ -378,6 +380,20 @@ export const TekerlemeLibrary: React.FC<TekerlemeLibraryProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {onOpenAdminPanel && (
+            <button
+              type="button"
+              onClick={() => {
+                playTone('tap');
+                onOpenAdminPanel();
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-3 rounded-2xl bg-[#FFBE0B]/20 hover:bg-[#FFBE0B]/30 border border-[#FFBE0B]/50 text-[#FFBE0B] font-bold text-xs transition-colors cursor-pointer"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>Yönetim Paneli (Üyeler)</span>
+            </button>
+          )}
+
           {onSyncSeedToFirestore && (
             <button
               type="button"

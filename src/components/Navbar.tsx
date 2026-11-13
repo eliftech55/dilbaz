@@ -21,7 +21,7 @@ import {
   X
 } from 'lucide-react';
 
-export type AppTab = 'room' | 'solo' | 'library' | 'friends' | 'leaderboard';
+export type AppTab = 'room' | 'solo' | 'library' | 'friends' | 'leaderboard' | 'admin';
 
 interface NavbarProps {
   activeTab: AppTab;
@@ -31,6 +31,7 @@ interface NavbarProps {
   onOpenGuide: () => void;
   pointsCount: number;
   pendingFriendsCount?: number;
+  pendingAdminCount?: number;
   isMuted: boolean;
   onToggleMute: () => void;
   onReplayIntro: () => void;
@@ -48,6 +49,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenGuide,
   pointsCount,
   pendingFriendsCount = 0,
+  pendingAdminCount = 0,
   isMuted,
   onToggleMute,
   onReplayIntro,
@@ -57,6 +59,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const resolvedDisplayName =
+    userProfile?.username || authUser?.displayName || authUser?.email?.split('@')[0] || 'Üye';
+  const totalBadgeCount = pendingFriendsCount + (isAdmin ? pendingAdminCount : 0);
 
   const handleSelectTab = (tab: AppTab) => {
     playTone('tap');
@@ -161,6 +166,26 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Trophy className="w-3.5 h-3.5" />
             <span>Liderlik Panosu</span>
           </button>
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => handleSelectTab('admin')}
+              className={`relative flex items-center gap-1.5 px-2.5 xl:px-3 py-2 rounded-xl text-[11px] xl:text-xs font-semibold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                activeTab === 'admin'
+                  ? 'bg-gradient-to-r from-[#FFBE0B] via-[#F59E0B] to-[#FF5400] text-[#0d1629] font-bold shadow-md shadow-[#FFBE0B]/35'
+                  : 'text-[#FFBE0B] bg-[#FFBE0B]/10 hover:bg-[#FFBE0B]/20 border border-[#FFBE0B]/30'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Yönetim</span>
+              {pendingAdminCount > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-[#FF006E] text-white text-[10px] font-bold leading-none">
+                  {pendingAdminCount}
+                </span>
+              )}
+            </button>
+          )}
         </nav>
 
         {/* Zone 3: Points + Account + Compact Controls */}
@@ -185,12 +210,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setMobileMenuOpen(false);
                 onOpenAuth();
               }}
-              className="flex items-center gap-1.5 pl-1 pr-2 sm:pl-1.5 sm:pr-2.5 py-1 rounded-full bg-[#14213D]/95 border border-[#00F5D4]/45 hover:border-[#FFBE0B] text-white text-xs font-semibold transition-all cursor-pointer max-w-[96px] sm:max-w-[155px] shrink-0"
-              title="Hesabım & Kullanıcı Adı"
+              className="flex items-center gap-1.5 pl-1 pr-2 sm:pl-1.5 sm:pr-2.5 py-1 rounded-full bg-[#14213D]/95 border border-[#00F5D4]/45 hover:border-[#FFBE0B] text-white text-xs font-semibold transition-all cursor-pointer max-w-[136px] sm:max-w-[180px] shrink-0"
+              title={`Hesabım: ${resolvedDisplayName}`}
             >
               <KilimAvatar avatar={userProfile?.avatar || 'elibelinde'} size={22} />
-              <span className="truncate max-w-[52px] sm:max-w-[85px]">
-                {userProfile?.username || authUser.email?.split('@')[0] || 'Üye'}
+              <span className="truncate max-w-[88px] sm:max-w-[120px]">
+                {resolvedDisplayName}
               </span>
               {isAdmin && <ShieldCheck className="w-3.5 h-3.5 text-[#FFBE0B] shrink-0" />}
             </button>
@@ -285,9 +310,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-            {!mobileMenuOpen && pendingFriendsCount > 0 && (
+            {!mobileMenuOpen && totalBadgeCount > 0 && (
               <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#FF006E] text-white text-[9px] font-bold flex items-center justify-center">
-                {pendingFriendsCount}
+                {totalBadgeCount}
               </span>
             )}
           </button>
@@ -296,7 +321,39 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Responsive Mobile & Tablet Dropdown Menu (< lg) — All Links Clearly Visible */}
       {mobileMenuOpen && (
-        <div className="lg:hidden border-t border-white/10 bg-[#0d1629]/98 backdrop-blur-lg px-3 py-3 space-y-2 shadow-2xl animate-screen-in">
+        <div className="lg:hidden border-t border-white/10 bg-[#0d1629]/98 backdrop-blur-lg px-3 py-3 space-y-2.5 shadow-2xl animate-screen-in">
+          {authUser && (
+            <button
+              type="button"
+              onClick={() => {
+                playTone('tap');
+                setMobileMenuOpen(false);
+                onOpenAuth();
+              }}
+              className="w-full p-2.5 rounded-2xl bg-[#14213D]/90 border border-[#00F5D4]/30 flex items-center justify-between gap-2 text-left cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <KilimAvatar avatar={userProfile?.avatar || 'elibelinde'} size={30} />
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-white truncate">
+                    {resolvedDisplayName}
+                  </div>
+                  <div className="text-[10px] text-[#93C5FD] truncate">
+                    {authUser.email || 'Kayıtlı Kullanıcı'}
+                  </div>
+                </div>
+              </div>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 border ${
+                  isAdmin
+                    ? 'bg-[#FFBE0B]/20 text-[#FFBE0B] border-[#FFBE0B]/45'
+                    : 'bg-[#3A86FF]/20 text-[#93C5FD] border-[#3A86FF]/35'
+                }`}
+              >
+                {isAdmin ? 'Yönetici' : 'Üye'}
+              </span>
+            </button>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             <button
               type="button"
@@ -369,6 +426,28 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Trophy className="w-4 h-4 shrink-0" />
               <span>Liderlik Panosu</span>
             </button>
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => handleSelectTab('admin')}
+                className={`min-h-[44px] flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'admin'
+                    ? 'bg-gradient-to-r from-[#FFBE0B] to-[#FF5400] text-[#0d1629] shadow-md'
+                    : 'bg-[#FFBE0B]/15 text-[#FFBE0B] border border-[#FFBE0B]/40'
+                }`}
+              >
+                <span className="flex items-center gap-2.5">
+                  <ShieldCheck className="w-4 h-4 shrink-0" />
+                  <span>Yönetim Paneli (Üyeler & Onaylar)</span>
+                </span>
+                {pendingAdminCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-[#FF006E] text-white text-[10px] font-bold">
+                    {pendingAdminCount}
+                  </span>
+                )}
+              </button>
+            )}
 
             <div className="grid grid-cols-2 gap-1.5">
               <button
