@@ -1,0 +1,367 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email == 'elifgencosmanoglu@gmail.com' && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\.\\-@]+$');
+    }
+
+    function isValidPublicProfile(data) {
+      return data.keys().hasAll(['uid', 'username', 'avatar', 'points', 'approvedTekerlemeCount', 'multiplayerWins', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'username', 'avatar', 'role', 'points', 'approvedTekerlemeCount', 'multiplayerWins', 'lastClaimId', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() <= 128
+        && data.username is string && data.username.size() >= 2 && data.username.size() <= 80
+        && data.avatar is string && data.avatar.size() >= 1 && data.avatar.size() <= 40
+        && (!('role' in data) || data.role in ['uye', 'yonetici'])
+        && data.points is number && data.points >= 0
+        && data.approvedTekerlemeCount is number && data.approvedTekerlemeCount >= 0
+        && data.multiplayerWins is number && data.multiplayerWins >= 0
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
+    function isValidPrivateUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'authProvider', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() <= 128
+        && data.email is string && data.email.size() <= 120
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
+    function isValidTekerleme(data) {
+      return data.keys().hasAll(['id', 'title', 'text', 'difficulty', 'category', 'benchmarkSeconds', 'authorId', 'authorUsername', 'status', 'rewardClaimed', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'text', 'difficulty', 'category', 'categoryLabel', 'targetSounds', 'benchmarkSeconds', 'tip', 'authorId', 'authorUsername', 'status', 'rewardClaimed', 'adminNote', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 120
+        && data.text is string && data.text.size() >= 5 && data.text.size() <= 500
+        && data.difficulty in ['kolay', 'orta', 'zor', 'efsane']
+        && data.category is string && data.category.size() <= 30
+        && data.benchmarkSeconds is number && data.benchmarkSeconds >= 1 && data.benchmarkSeconds <= 60
+        && data.authorId is string && data.authorId.size() <= 128
+        && data.authorUsername is string && data.authorUsername.size() >= 2 && data.authorUsername.size() <= 80
+        && data.status in ['pending', 'approved', 'rejected']
+        && data.rewardClaimed is bool
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['id', 'recipientUid', 'type', 'title', 'message', 'read', 'createdAt'])
+        && data.keys().hasOnly(['id', 'recipientUid', 'type', 'title', 'message', 'tekerlemeTitle', 'pointsAwarded', 'read', 'createdAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.recipientUid is string && data.recipientUid.size() <= 128
+        && data.type in ['tekerleme_approved', 'tekerleme_deleted', 'tekerleme_rejected', 'role_updated']
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.message is string && data.message.size() >= 1 && data.message.size() <= 400
+        && (!('tekerlemeTitle' in data) || (data.tekerlemeTitle is string && data.tekerlemeTitle.size() <= 120))
+        && (!('pointsAwarded' in data) || data.pointsAwarded is number)
+        && data.read is bool
+        && data.createdAt is number;
+    }
+
+    function isValidEmailDirectory(data) {
+      return data.keys().hasAll(['uid', 'username', 'avatar', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'username', 'avatar', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.username is string && data.username.size() >= 2 && data.username.size() <= 80
+        && data.avatar is string && data.avatar.size() >= 1 && data.avatar.size() <= 40
+        && data.updatedAt is number;
+    }
+
+    function isValidFriendship(data) {
+      return data.keys().hasAll(['id', 'users', 'requesterUid', 'requesterName', 'requesterAvatar', 'recipientUid', 'recipientName', 'recipientAvatar', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'users', 'requesterUid', 'requesterName', 'requesterAvatar', 'recipientUid', 'recipientName', 'recipientAvatar', 'status', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id.size() >= 3 && data.id.size() <= 128
+        && data.users is list && data.users.size() == 2 && data.users[0] is string && data.users[1] is string
+        && data.requesterUid is string && data.requesterUid.size() <= 128
+        && data.requesterName is string && data.requesterName.size() >= 1 && data.requesterName.size() <= 80
+        && data.requesterAvatar is string && data.requesterAvatar.size() >= 1 && data.requesterAvatar.size() <= 40
+        && data.recipientUid is string && data.recipientUid.size() <= 128
+        && data.recipientName is string && data.recipientName.size() >= 1 && data.recipientName.size() <= 80
+        && data.recipientAvatar is string && data.recipientAvatar.size() >= 1 && data.recipientAvatar.size() <= 40
+        && data.status in ['pending', 'accepted']
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
+    function isValidRoomInvite(data) {
+      return data.keys().hasAll(['id', 'roomCode', 'roomTitle', 'senderUid', 'senderName', 'senderAvatar', 'recipientUid', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'roomCode', 'roomTitle', 'senderUid', 'senderName', 'senderAvatar', 'recipientUid', 'status', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id.size() >= 3 && data.id.size() <= 128
+        && data.roomCode is string && data.roomCode.size() >= 4 && data.roomCode.size() <= 32
+        && data.roomTitle is string && data.roomTitle.size() >= 1 && data.roomTitle.size() <= 120
+        && data.senderUid is string && data.senderUid.size() <= 128
+        && data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 80
+        && data.senderAvatar is string && data.senderAvatar.size() >= 1 && data.senderAvatar.size() <= 40
+        && data.recipientUid is string && data.recipientUid.size() <= 128
+        && data.status in ['pending', 'accepted', 'dismissed']
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+
+    // Default deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Live classroom multiplayer rooms (unregistered guests may also play)
+    match /rooms/{roomCode} {
+      allow read: if true;
+      allow create: if isValidId(roomCode) && incoming().code == roomCode;
+      allow update: if isValidId(roomCode) && incoming().code == existing().code;
+      allow delete: if false;
+    }
+
+    // Public leaderboard & member table profiles
+    match /publicProfiles/{userId} {
+      allow read: if true;
+      allow create: if isOwner(userId)
+        && isValidId(userId)
+        && isValidPublicProfile(incoming())
+        && incoming().uid == userId
+        && ('role' in incoming())
+        && (incoming().role == 'uye' || isAdmin())
+        && incoming().points == 0
+        && incoming().approvedTekerlemeCount == 0
+        && incoming().multiplayerWins == 0;
+      allow update: if isValidId(userId) && isValidPublicProfile(incoming()) && (
+        isAdmin() ||
+        (
+          isOwner(userId)
+          && incoming().uid == existing().uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'avatar', 'updatedAt'])
+        ) ||
+        (
+          isOwner(userId)
+          && incoming().uid == existing().uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['points', 'multiplayerWins', 'lastClaimId', 'updatedAt'])
+          && incoming().points == existing().points + 150
+          && incoming().multiplayerWins == existing().multiplayerWins + 1
+          && incoming().lastClaimId is string
+          && !exists(/databases/$(database)/documents/winClaims/$(incoming().lastClaimId))
+          && existsAfter(/databases/$(database)/documents/winClaims/$(incoming().lastClaimId))
+        )
+      );
+      allow delete: if isAdmin() && isValidId(userId) && userId != request.auth.uid;
+    }
+
+    // Private PII records (emails)
+    match /usersPrivate/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId)
+        && isValidId(userId)
+        && isValidPrivateUser(incoming())
+        && incoming().uid == userId;
+      allow update: if (isOwner(userId) || isAdmin())
+        && isValidId(userId)
+        && isValidPrivateUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(userId) && userId != request.auth.uid;
+    }
+
+    // Unique custom username reservations
+    match /usernames/{normalizedName} {
+      allow get: if isValidId(normalizedName);
+      allow list: if false;
+      allow create: if isSignedIn()
+        && isValidId(normalizedName)
+        && incoming().keys().hasAll(['uid', 'username', 'createdAt'])
+        && incoming().keys().hasOnly(['uid', 'username', 'createdAt'])
+        && incoming().uid == request.auth.uid
+        && incoming().username is string && incoming().username.size() >= 2 && incoming().username.size() <= 80
+        && incoming().createdAt is number
+        && !exists(/databases/$(database)/documents/usernames/$(normalizedName));
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(normalizedName) && (existing().uid == request.auth.uid || isAdmin());
+    }
+
+    // Community-contributed and admin-managed Tekerleme Havuzu
+    match /tekerlemeler/{tekerlemeId} {
+      allow get: if isValidId(tekerlemeId) && (
+        existing().status == 'approved' ||
+        isAdmin() ||
+        (isSignedIn() && existing().authorId == request.auth.uid)
+      );
+      allow list: if existing().status == 'approved' || isAdmin() || (isSignedIn() && existing().authorId == request.auth.uid);
+      allow create: if isSignedIn()
+        && isValidId(tekerlemeId)
+        && isValidTekerleme(incoming())
+        && incoming().id == tekerlemeId
+        && incoming().authorId == request.auth.uid
+        && (
+          (isAdmin() && incoming().status in ['approved', 'pending']) ||
+          (incoming().status == 'pending' && incoming().rewardClaimed == false)
+        );
+      allow update: if isSignedIn()
+        && isValidId(tekerlemeId)
+        && isValidTekerleme(incoming())
+        && (
+          isAdmin() ||
+          (
+            existing().authorId == request.auth.uid
+            && existing().status == 'pending'
+            && incoming().status == 'pending'
+            && incoming().rewardClaimed == false
+            && incoming().authorId == existing().authorId
+            && incoming().createdAt == existing().createdAt
+            && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'text', 'difficulty', 'category', 'categoryLabel', 'targetSounds', 'benchmarkSeconds', 'tip', 'updatedAt'])
+          )
+        );
+      allow delete: if isSignedIn() && isValidId(tekerlemeId) && (
+        isAdmin() ||
+        (existing().authorId == request.auth.uid && existing().status == 'pending')
+      );
+    }
+
+    // Atomic win reward receipts
+    match /winClaims/{claimId} {
+      allow get: if isSignedIn() && (resource == null || existing().uid == request.auth.uid || isAdmin());
+      allow list: if false;
+      allow create: if isSignedIn()
+        && isValidId(claimId)
+        && incoming().keys().hasAll(['uid', 'roomCode', 'createdAt'])
+        && incoming().keys().hasOnly(['uid', 'roomCode', 'createdAt'])
+        && incoming().uid == request.auth.uid
+        && incoming().roomCode is string && incoming().roomCode.size() <= 32
+        && claimId == (incoming().roomCode + '_' + request.auth.uid)
+        && incoming().createdAt is number
+        && !exists(/databases/$(database)/documents/winClaims/$(claimId))
+        && get(/databases/$(database)/documents/rooms/$(incoming().roomCode)).data.status == 'game_over'
+        && get(/databases/$(database)/documents/rooms/$(incoming().roomCode)).data.winnerId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // User notifications (approval, deletion, promotion)
+    match /notifications/{notificationId} {
+      allow get: if isSignedIn() && isValidId(notificationId) && (existing().recipientUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().recipientUid == request.auth.uid;
+      allow create: if isAdmin() && isValidId(notificationId) && isValidNotification(incoming()) && incoming().id == notificationId;
+      allow update: if isSignedIn()
+        && isValidId(notificationId)
+        && isValidNotification(incoming())
+        && existing().recipientUid == request.auth.uid
+        && incoming().recipientUid == existing().recipientUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+      allow delete: if isSignedIn() && isValidId(notificationId) && (existing().recipientUid == request.auth.uid || isAdmin());
+    }
+
+    // Admin registry (manageable by existing admins)
+    match /admins/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create, update: if isAdmin()
+        && isValidId(userId)
+        && incoming().uid == userId
+        && incoming().keys().hasAll(['uid', 'createdAt'])
+        && incoming().keys().hasOnly(['uid', 'promotedBy', 'createdAt'])
+        && incoming().uid is string && incoming().uid.size() <= 128
+        && incoming().createdAt is number;
+      allow delete: if isAdmin() && isValidId(userId) && userId != request.auth.uid;
+    }
+
+    // Hashed email lookup index for friend requests (no raw PII stored, list disabled)
+    match /emailDirectory/{emailHash} {
+      allow get: if isSignedIn() && isValidId(emailHash);
+      allow list: if false;
+      allow create: if isSignedIn()
+        && isValidId(emailHash)
+        && isValidEmailDirectory(incoming())
+        && incoming().uid == request.auth.uid;
+      allow update: if isSignedIn()
+        && isValidId(emailHash)
+        && isValidEmailDirectory(incoming())
+        && existing().uid == request.auth.uid
+        && incoming().uid == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(emailHash) && (existing().uid == request.auth.uid || isAdmin());
+    }
+
+    // Friend requests and accepted friendships
+    match /friendships/{friendshipId} {
+      allow get: if isSignedIn() && isValidId(friendshipId) && (resource == null || request.auth.uid in existing().users);
+      allow list: if isSignedIn() && request.auth.uid in existing().users;
+      allow create: if isSignedIn()
+        && isValidId(friendshipId)
+        && isValidFriendship(incoming())
+        && incoming().id == friendshipId
+        && incoming().requesterUid == request.auth.uid
+        && incoming().recipientUid != request.auth.uid
+        && request.auth.uid in incoming().users
+        && incoming().recipientUid in incoming().users
+        && incoming().status == 'pending'
+        && exists(/databases/$(database)/documents/publicProfiles/$(incoming().recipientUid));
+      allow update: if isSignedIn()
+        && isValidId(friendshipId)
+        && isValidFriendship(incoming())
+        && existing().status == 'pending'
+        && existing().recipientUid == request.auth.uid
+        && incoming().status == 'accepted'
+        && incoming().requesterUid == existing().requesterUid
+        && incoming().recipientUid == existing().recipientUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'recipientName', 'recipientAvatar', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(friendshipId) && (request.auth.uid in existing().users || isAdmin());
+    }
+
+    // Live multiplayer room invitations between friends
+    match /roomInvites/{inviteId} {
+      allow get: if isSignedIn() && isValidId(inviteId) && (resource == null || existing().recipientUid == request.auth.uid || existing().senderUid == request.auth.uid);
+      allow list: if isSignedIn() && (existing().recipientUid == request.auth.uid || existing().senderUid == request.auth.uid);
+      allow create: if isSignedIn()
+        && isValidId(inviteId)
+        && isValidRoomInvite(incoming())
+        && incoming().id == inviteId
+        && incoming().senderUid == request.auth.uid
+        && incoming().recipientUid != request.auth.uid
+        && incoming().status == 'pending'
+        && exists(/databases/$(database)/documents/rooms/$(incoming().roomCode));
+      allow update: if isSignedIn()
+        && isValidId(inviteId)
+        && isValidRoomInvite(incoming())
+        && (
+          (
+            existing().senderUid == request.auth.uid
+            && incoming().senderUid == existing().senderUid
+            && incoming().recipientUid == existing().recipientUid
+            && incoming().createdAt == existing().createdAt
+            && incoming().status == 'pending'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['roomTitle', 'senderName', 'senderAvatar', 'status', 'updatedAt'])
+          ) ||
+          (
+            existing().recipientUid == request.auth.uid
+            && incoming().senderUid == existing().senderUid
+            && incoming().recipientUid == existing().recipientUid
+            && incoming().createdAt == existing().createdAt
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+        );
+      allow delete: if isSignedIn() && isValidId(inviteId) && (existing().recipientUid == request.auth.uid || existing().senderUid == request.auth.uid || isAdmin());
+    }
+  }
+}

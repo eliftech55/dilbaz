@@ -1,0 +1,601 @@
+import { 
+  doc, 
+  setDoc, 
+  getDoc, 
+  updateDoc, 
+  onSnapshot 
+} from 'firebase/firestore';
+import { db } from './config';
+import { Room, Tekerleme, PlayerScore, Difficulty, PhonemeCategory } from '../types/game';
+import { INITIAL_TEKERLEMELER } from '../data/tekerlemeler';
+import { generateBotScore } from '../utils/scoreCalculator';
+
+/**
+ * Deep cleans an object before writing to Firestore.
+ * Firestore strictly forbids `undefined` anywhere in documents.
+ */
+export function deepCleanForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) {
+    return obj.map(deepCleanForFirestore);
+  }
+  if (typeof obj === 'object') {
+    const res: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        res[key] = deepCleanForFirestore(value);
+      }
+    }
+    return res;
+  }
+  return obj;
+}
+
+export function getRandomTekerleme(
+  difficulty: 'karisik' | Difficulty, 
+  category: PhonemeCategory,
+  excludeId?: string,
+  customPool?: Tekerleme[]
+): Tekerleme {
+  let pool = customPool && customPool.length > 0 ? [...customPool] : [...INITIAL_TEKERLEMELER];
+  if (difficulty && difficulty !== 'karisik') {
+    const diffFiltered = pool.filter(t => t.difficulty === difficulty);
+    if (diffFiltered.length > 0) pool = diffFiltered;
+  }
+  if (category && category !== 'tum') {
+    const catFiltered = pool.filter(t => t.category === category);
+    if (catFiltered.length > 0) pool = catFiltered;
+  }
+  if (excludeId) {
+    const withoutExcluded = pool.filter(t => t.id !== excludeId);
+    if (withoutExcluded.length > 0) pool = withoutExcluded;
+  }
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+export class RoomFirestore {
+  /**
+   * Create a new room in Cloud Firestore
+   */
+  public static async createRoom(params: {
+    hostId: string;
+    hostName: string;
+    avatar: string;
+    roundCount: number;
+    difficulty: 'karisik' | Difficulty;
+    category: PhonemeCategory;
+  }): Promise<Room> {
+    const code = `DLBZ-${Math.floor(1000 + Math.random() * 9000)}`;
+    const roomRef = doc(db, 'rooms', code);
+
+    const newRoom: Room = {
+      code,
+      title: `${params.hostName}'in Tekerleme Odası`,
+      hostId: params.hostId,
+      hostName: params.hostName,
+      status: 'waiting',
+      currentRound: 1,
+      totalRounds: Number(params.roundCount) || 3,
+      settings: {
+        roundCount: Number(params.roundCount) || 3,
+        timeLimitSeconds: 15,
+        difficulty: params.difficulty,
+        category: params.category
+      },
+      players: [
+        {
+          id: params.hostId,
+          name: params.hostName,
+          avatar: params.avatar || 'kilim-elibelinde',
+          isHost: true,
+          isReady: true,
+          totalPoints: 0
+        }
+      ],
+      roundScores: {}
+    };
+
+    const cleanPayload = deepCleanForFirestore({
+      ...newRoom,
+      updatedAt: Date.now()
+    });
+
+    await setDoc(roomRef, cleanPayload);
+    return newRoom;
+  }
+
+  /**
+   * Join an existing room via PIN code
+   */
+  public static async joinRoom(
+    code: string,
+    player: { id: string; name: string; avatar: string }
+  ): Promise<Room> {
+    const normalizedCode = code.trim().toUpperCase();
+    const roomRef = doc(db, 'rooms', normalizedCode);
+    const snap = await getDoc(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error(`"${normalizedCode}" kodlu oda bulunamadı. Lütfen kodu kontrol edin.`);
+    }
+
+    const roomData = snap.data() as Room;
+
+    if (roomData.status !== 'waiting') {
+      throw new Error('Bu odada yarışma başladı. Lobiye yeni katılımcı kabul edilmiyor.');
+    }
+
+    const players = (roomData.players || []).map(p => {
+      const cleanP: any = {
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar || 'kilim-kocboynuzu',
+        isHost: Boolean(p.isHost),
+        isReady: Boolean(p.isReady),
+        totalPoints: Number(p.totalPoints) || 0
+      };
+      if (p.currentRoundScore) cleanP.currentRoundScore = p.currentRoundScore;
+      return cleanP;
+    });
+
+    const existingIndex = players.findIndex(p => p.id === player.id);
+
+    if (existingIndex >= 0) {
+      players[existingIndex].name = player.name || players[existingIndex].name;
+      players[existingIndex].avatar = player.avatar || players[existingIndex].avatar;
+      players[existingIndex].isReady = true;
+    } else {
+      let finalName = player.name;
+      const countSameName = players.filter(p => p.name === player.name).length;
+      if (countSameName > 0) {
+        finalName = `${player.name} (${countSameName + 1})`;
+      }
+
+      players.push({
+        id: player.id,
+        name: finalName,
+        avatar: player.avatar || 'kilim-kocboynuzu',
+        isHost: false,
+        isReady: true,
+        totalPoints: 0
+      });
+    }
+
+    const cleanPayload = deepCleanForFirestore({
+      players,
+      updatedAt: Date.now()
+    });
+
+    await updateDoc(roomRef, cleanPayload);
+
+    return {
+      ...roomData,
+      players
+    };
+  }
+
+  /**
+   * Realtime Firestore listener for live multiplayer synchronization
+   */
+  public static subscribeToRoom(
+    code: string,
+    onUpdate: (room: Room) => void,
+    onError?: (error: any) => void
+  ): () => void {
+    const normalizedCode = code.trim().toUpperCase();
+    const roomRef = doc(db, 'rooms', normalizedCode);
+
+    const unsubscribe = onSnapshot(
+      roomRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data() as Room;
+          onUpdate(data);
+        }
+      },
+      (err) => {
+        console.warn('Firestore onSnapshot error:', err);
+        onError?.(err);
+      }
+    );
+
+    return unsubscribe;
+  }
+
+  /**
+   * Host starts the game: sets round 1, synchronized tekerleme
+   */
+  public static async startGame(code: string, hostId: string, customPool?: Tekerleme[]): Promise<void> {
+    const normalizedCode = code.trim().toUpperCase();
+    const roomRef = doc(db, 'rooms', normalizedCode);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) throw new Error('Oda bulunamadı');
+
+    const roomData = snap.data() as Room;
+    const isAuthorizedHost =
+      roomData.hostId === hostId ||
+      roomData.players.find(p => p.id === hostId)?.isHost ||
+      roomData.players[0]?.id === hostId;
+
+    if (!isAuthorizedHost) {
+      throw new Error('Yalnızca oda kurucusu yarışmayı başlatabilir.');
+    }
+
+    const firstTekerleme = getRandomTekerleme(
+      roomData.settings.difficulty,
+      roomData.settings.category,
+      undefined,
+      customPool
+    );
+
+    const cleanTekerleme = {
+      id: firstTekerleme.id,
+      title: firstTekerleme.title,
+      text: firstTekerleme.text,
+      difficulty: firstTekerleme.difficulty,
+      category: firstTekerleme.category,
+      categoryLabel: firstTekerleme.categoryLabel || '',
+      targetSounds: firstTekerleme.targetSounds || [],
+      benchmarkSeconds: firstTekerleme.benchmarkSeconds || 4,
+      tip: firstTekerleme.tip || ''
+    };
+
+    // Clean players list without undefined currentRoundScore
+    const players = (roomData.players || []).map(p => ({
+      id: p.id,
+      name: p.name,
+      avatar: p.avatar,
+      isHost: Boolean(p.isHost),
+      isReady: Boolean(p.isReady),
+      totalPoints: Number(p.totalPoints) || 0
+    }));
+
+    const cleanPayload = deepCleanForFirestore({
+      status: 'in_round',
+      currentRound: 1,
+      currentTekerleme: cleanTekerleme,
+      players,
+      [`roundScores.1`]: [],
+      updatedAt: Date.now()
+    });
+
+    await updateDoc(roomRef, cleanPayload);
+  }
+
+  /**
+   * Student or Host submits their round score
+   */
+  public static async submitScore(code: string, score: PlayerScore): Promise<void> {
+    const normalizedCode = code.trim().toUpperCase();
+    const roomRef = doc(db, 'rooms', normalizedCode);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) return;
+
+    const roomData = snap.data() as Room;
+    const roundNum = roomData.currentRound || 1;
+    const existingScores: PlayerScore[] = [...(roomData.roundScores?.[roundNum] || [])];
+
+    const cleanScore: any = {
+      playerId: score.playerId,
+      playerName: score.playerName,
+      avatar: score.avatar,
+      isHost: Boolean(score.isHost),
+      isCurrentUser: Boolean(score.isCurrentUser),
+      accuracy: Number(score.accuracy) || 0,
+      durationSeconds: Number(score.durationSeconds) || 0,
+      wpm: Number(score.wpm) || 0,
+      speedScore: Number(score.speedScore) || 0,
+      totalScore: Number(score.totalScore) || 0
+    };
+    if (score.badge) cleanScore.badge = score.badge;
+    if (score.wordBreakdown) cleanScore.wordBreakdown = score.wordBreakdown;
+
+    const existingIdx = existingScores.findIndex(s => s.playerId === score.playerId);
+    const previousScoreForThisRound = existingIdx >= 0 ? existingScores[existingIdx].totalScore : 0;
+
+    if (existingIdx >= 0) {
+      existingScores[existingIdx] = cleanScore;
+    } else {
+      existingScores.push(cleanScore);
+    }
+
+    // Auto-submit simulated scores for any bot players in the room if not yet scored this round
+    const botSkills: ('pro' | 'mid' | 'novice')[] = ['pro', 'mid', 'novice'];
+    if (roomData.currentTekerleme) {
+      (roomData.players || []).forEach((p, idx) => {
+        if (p.id.startsWith('bot-') && !existingScores.some(s => s.playerId === p.id)) {
+          const botResult = generateBotScore(
+            roomData.currentTekerleme!,
+            p.name,
+            p.avatar,
+            botSkills[idx % botSkills.length]
+          );
+          botResult.playerId = p.id;
+          existingScores.push(botResult);
+        }
+      });
+    }
+
+    // Update players' currentRoundScore and totalPoints accurately
+    const players = (roomData.players || []).map(p => {
+      const roundEntry = existingScores.find(s => s.playerId === p.id);
+      if (p.id === score.playerId) {
+        const prevTotal = Number(p.totalPoints) || 0;
+        const delta = cleanScore.totalScore - previousScoreForThisRound;
+        return {
+          id: p.id,
+          name: p.name,
+          avatar: p.avatar,
+          isHost: Boolean(p.isHost),
+          isReady: Boolean(p.isReady),
+          currentRoundScore: cleanScore,
+          totalPoints: prevTotal + delta
+        };
+      }
+      if (p.id.startsWith('bot-') && roundEntry && !p.currentRoundScore) {
+        return {
+          id: p.id,
+          name: p.name,
+          avatar: p.avatar,
+          isHost: false,
+          isReady: true,
+          currentRoundScore: roundEntry,
+          totalPoints: (Number(p.totalPoints) || 0) + roundEntry.totalScore
+        };
+      }
+      return {
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        isHost: Boolean(p.isHost),
+        isReady: Boolean(p.isReady),
+        totalPoints: Number(p.totalPoints) || 0,
+        ...(p.currentRoundScore ? { currentRoundScore: p.currentRoundScore } : {})
+      };
+    });
+
+    let nextStatus = roomData.status;
+    if (existingScores.length >= players.length) {
+      nextStatus = 'round_result';
+    }
+
+    const cleanPayload = deepCleanForFirestore({
+      players,
+      status: nextStatus,
+      [`roundScores.${roundNum}`]: existingScores,
+      updatedAt: Date.now()
+    });
+
+    await updateDoc(roomRef, cleanPayload);
+  }
+
+  /**
+   * Host forces current round to show results immediately
+   */
+  public static async finishRoundNow(code: string, hostId: string): Promise<void> {
+    const normalizedCode = code.trim().toUpperCase();
+    const roomRef = doc(db, 'rooms', normalizedCode);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) return;
+
+    const roomData = snap.data() as Room;
+    if (roomData.hostId !== hostId) return;
+
+    await updateDoc(roomRef, deepCleanForFirestore({
+      status: 'round_result',
+      updatedAt: Date.now()
+    }));
+  }
+
+  /**
+   * Host advances to the next round or finishes tournament
+   */
+  public static async nextRound(code: string, hostId: string, customPool?: Tekerleme[]): Promise<void> {
+    const normalizedCode = code.trim().toUpperCase();
+    const roomRef = doc(db, 'rooms', normalizedCode);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) return;
+
+    const roomData = snap.data() as Room;
+
+    if (roomData.currentRound >= roomData.totalRounds) {
+      const sorted = [...(roomData.players || [])].sort(
+        (a, b) => (b.totalPoints || 0) - (a.totalPoints || 0)
+      );
+      const topWinnerId = sorted[0]?.id || '';
+      await updateDoc(roomRef, deepCleanForFirestore({
+        status: 'game_over',
+        winnerId: topWinnerId,
+        updatedAt: Date.now()
+      }));
+    } else {
+      const nextRoundNum = roomData.currentRound + 1;
+      const nextTekerleme = getRandomTekerleme(
+        roomData.settings.difficulty,
+        roomData.settings.category,
+        roomData.currentTekerleme?.id,
+        customPool
+      );
+
+      const cleanTekerleme = {
+        id: nextTekerleme.id,
+        title: nextTekerleme.title,
+        text: nextTekerleme.text,
+        difficulty: nextTekerleme.difficulty,
+        category: nextTekerleme.category,
+        categoryLabel: nextTekerleme.categoryLabel || '',
+        targetSounds: nextTekerleme.targetSounds || [],
+        benchmarkSeconds: nextTekerleme.benchmarkSeconds || 4,
+        tip: nextTekerleme.tip || ''
+      };
+
+      const players = (roomData.players || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        isHost: Boolean(p.isHost),
+        isReady: Boolean(p.isReady),
+        totalPoints: Number(p.totalPoints) || 0
+      }));
+
+      await updateDoc(roomRef, deepCleanForFirestore({
+        currentRound: nextRoundNum,
+        currentTekerleme: cleanTekerleme,
+        status: 'in_round',
+        players,
+        [`roundScores.${nextRoundNum}`]: [],
+        updatedAt: Date.now()
+      }));
+    }
+  }
+
+  /**
+   * Host restarts the game
+   */
+  public static async restartGame(code: string, hostId: string, customPool?: Tekerleme[]): Promise<void> {
+    const normalizedCode = code.trim().toUpperCase();
+    const roomRef = doc(db, 'rooms', normalizedCode);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) return;
+
+    const roomData = snap.data() as Room;
+
+    const firstTekerleme = getRandomTekerleme(
+      roomData.settings.difficulty,
+      roomData.settings.category,
+      undefined,
+      customPool
+    );
+
+    const cleanTekerleme = {
+      id: firstTekerleme.id,
+      title: firstTekerleme.title,
+      text: firstTekerleme.text,
+      difficulty: firstTekerleme.difficulty,
+      category: firstTekerleme.category,
+      categoryLabel: firstTekerleme.categoryLabel || '',
+      targetSounds: firstTekerleme.targetSounds || [],
+      benchmarkSeconds: firstTekerleme.benchmarkSeconds || 4,
+      tip: firstTekerleme.tip || ''
+    };
+
+    const players = (roomData.players || []).map(p => ({
+      id: p.id,
+      name: p.name,
+      avatar: p.avatar,
+      isHost: Boolean(p.isHost),
+      isReady: Boolean(p.isReady),
+      totalPoints: 0
+    }));
+
+    await updateDoc(roomRef, deepCleanForFirestore({
+      currentRound: 1,
+      currentTekerleme: cleanTekerleme,
+      status: 'in_round',
+      winnerId: '',
+      players,
+      roundScores: { 1: [] },
+      updatedAt: Date.now()
+    }));
+  }
+
+  /**
+   * Toggle ready status
+   */
+  public static async toggleReady(code: string, playerId: string): Promise<void> {
+    const normalizedCode = code.trim().toUpperCase();
+    const roomRef = doc(db, 'rooms', normalizedCode);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) return;
+
+    const roomData = snap.data() as Room;
+    const players = (roomData.players || []).map(p => ({
+      id: p.id,
+      name: p.name,
+      avatar: p.avatar,
+      isHost: Boolean(p.isHost),
+      isReady: p.id === playerId ? !p.isReady : Boolean(p.isReady),
+      totalPoints: Number(p.totalPoints) || 0,
+      ...(p.currentRoundScore ? { currentRoundScore: p.currentRoundScore } : {})
+    }));
+
+    await updateDoc(roomRef, deepCleanForFirestore({
+      players,
+      updatedAt: Date.now()
+    }));
+  }
+
+  /**
+   * Leave room
+   */
+  public static async leaveRoom(code: string, playerId: string): Promise<void> {
+    const normalizedCode = code.trim().toUpperCase();
+    const roomRef = doc(db, 'rooms', normalizedCode);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) return;
+
+    const roomData = snap.data() as Room;
+    const players = (roomData.players || []).filter(p => p.id !== playerId);
+
+    if (players.length === 0) {
+      return;
+    }
+
+    let hostId = roomData.hostId;
+    let hostName = roomData.hostName;
+
+    if (hostId === playerId && players.length > 0) {
+      hostId = players[0].id;
+      hostName = players[0].name;
+      players[0].isHost = true;
+    }
+
+    await updateDoc(roomRef, deepCleanForFirestore({
+      players,
+      hostId,
+      hostName,
+      updatedAt: Date.now()
+    }));
+  }
+
+  /**
+   * Add optional test bot
+   */
+  public static async addTestBot(code: string): Promise<void> {
+    const normalizedCode = code.trim().toUpperCase();
+    const roomRef = doc(db, 'rooms', normalizedCode);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) return;
+
+    const roomData = snap.data() as Room;
+    const botMotifs = [
+      { name: 'Koçboynuzu', avatar: 'kilim-kocboynuzu' },
+      { name: 'Hayat Ağacı', avatar: 'kilim-hayatagaci' },
+      { name: 'Yıldız', avatar: 'kilim-yildiz' },
+      { name: 'Su Yolu', avatar: 'kilim-suyolu' },
+      { name: 'Turna Kuşu', avatar: 'kilim-kus' }
+    ];
+    const botCount = (roomData.players || []).filter(p => p.id.startsWith('bot-')).length;
+    const chosen = botMotifs[botCount % botMotifs.length];
+    const name = `${chosen.name} (Test Botu)`;
+    const avatar = chosen.avatar;
+    const botId = `bot-${Date.now()}`;
+
+    const players = [
+      ...(roomData.players || []),
+      {
+        id: botId,
+        name,
+        avatar,
+        isHost: false,
+        isReady: true,
+        totalPoints: 0
+      }
+    ];
+
+    await updateDoc(roomRef, deepCleanForFirestore({
+      players,
+      updatedAt: Date.now()
+    }));
+  }
+}

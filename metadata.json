@@ -1,0 +1,6 @@
+{
+  "name": "Dilbaz - Tekerleme ve Diksiyon Yarışması",
+  "description": "Öğrencilerin aynı tekerleme ile hız ve telaffuz doğruluğunda yarıştığı canlı odalı diksiyon ve tekerleme platformu.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

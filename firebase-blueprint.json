@@ -1,0 +1,259 @@
+{
+  "entities": {
+    "Room": {
+      "title": "Room",
+      "description": "Multiplayer tongue twister game room",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Room join PIN code, e.g. DLBZ-4821"
+        },
+        "title": {
+          "type": "string",
+          "description": "Room display title"
+        },
+        "hostId": {
+          "type": "string",
+          "description": "ID of host player"
+        },
+        "hostName": {
+          "type": "string",
+          "description": "Display name of host"
+        },
+        "status": {
+          "type": "string",
+          "description": "Room status: waiting, in_round, round_result, game_over"
+        },
+        "currentRound": {
+          "type": "number",
+          "description": "Current active round number"
+        },
+        "totalRounds": {
+          "type": "number",
+          "description": "Total rounds in this tournament"
+        },
+        "currentTekerleme": {
+          "type": "object",
+          "description": "Active tongue twister for this round"
+        },
+        "players": {
+          "type": "array",
+          "description": "List of players currently in this room"
+        },
+        "roundScores": {
+          "type": "object",
+          "description": "Map of round number to submitted player scores"
+        },
+        "winnerId": {
+          "type": "string",
+          "description": "Player UID of 1st place winner when game_over"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Timestamp of last modification"
+        }
+      },
+      "required": ["code", "hostId", "status", "currentRound", "totalRounds", "players"]
+    },
+    "PublicProfile": {
+      "title": "PublicProfile",
+      "description": "Public Dilbaz user profile, role, and leaderboard stats",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "avatar": { "type": "string", "maxLength": 40 },
+        "role": { "type": "string", "enum": ["uye", "yonetici"] },
+        "points": { "type": "number" },
+        "approvedTekerlemeCount": { "type": "number" },
+        "multiplayerWins": { "type": "number" },
+        "lastClaimId": { "type": "string", "maxLength": 160 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["uid", "username", "avatar", "role", "points", "approvedTekerlemeCount", "multiplayerWins", "createdAt", "updatedAt"]
+    },
+    "PrivateUser": {
+      "title": "PrivateUser",
+      "description": "Private PII for registered users",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "maxLength": 120 },
+        "authProvider": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["uid", "email", "createdAt", "updatedAt"]
+    },
+    "UsernameClaim": {
+      "title": "UsernameClaim",
+      "description": "Unique custom username reservation",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string", "maxLength": 80 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "username", "createdAt"]
+    },
+    "TekerlemeContribution": {
+      "title": "TekerlemeContribution",
+      "description": "User-submitted or admin-managed tongue twister",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 120 },
+        "text": { "type": "string", "maxLength": 500 },
+        "difficulty": { "type": "string", "enum": ["kolay", "orta", "zor", "efsane"] },
+        "category": { "type": "string", "maxLength": 30 },
+        "categoryLabel": { "type": "string", "maxLength": 60 },
+        "targetSounds": { "type": "array" },
+        "benchmarkSeconds": { "type": "number" },
+        "tip": { "type": "string", "maxLength": 300 },
+        "authorId": { "type": "string" },
+        "authorUsername": { "type": "string", "maxLength": 80 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "rewardClaimed": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "title", "text", "difficulty", "category", "benchmarkSeconds", "authorId", "authorUsername", "status", "rewardClaimed", "createdAt", "updatedAt"]
+    },
+    "WinClaim": {
+      "title": "WinClaim",
+      "description": "Atomic receipt proving 1st-place multiplayer win reward",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "roomCode": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "roomCode", "createdAt"]
+    },
+    "UserNotification": {
+      "title": "UserNotification",
+      "description": "In-app notification when a tekerleme contribution is approved/deleted or role changes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "recipientUid": { "type": "string" },
+        "type": { "type": "string", "enum": ["tekerleme_approved", "tekerleme_deleted", "tekerleme_rejected", "role_updated"] },
+        "title": { "type": "string", "maxLength": 120 },
+        "message": { "type": "string", "maxLength": 400 },
+        "tekerlemeTitle": { "type": "string", "maxLength": 120 },
+        "pointsAwarded": { "type": "number" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "recipientUid", "type", "title", "message", "read", "createdAt"]
+    },
+    "AdminGrant": {
+      "title": "AdminGrant",
+      "description": "Admin role grant record for elevated privileges",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "promotedBy": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "EmailDirectory": {
+      "title": "EmailDirectory",
+      "description": "Hashed email lookup index pointing to public user identity without storing PII",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string", "maxLength": 80 },
+        "avatar": { "type": "string", "maxLength": 40 },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["uid", "username", "avatar", "updatedAt"]
+    },
+    "Friendship": {
+      "title": "Friendship",
+      "description": "Friend request or accepted friendship between two registered users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "users": { "type": "array" },
+        "requesterUid": { "type": "string" },
+        "requesterName": { "type": "string", "maxLength": 80 },
+        "requesterAvatar": { "type": "string", "maxLength": 40 },
+        "recipientUid": { "type": "string" },
+        "recipientName": { "type": "string", "maxLength": 80 },
+        "recipientAvatar": { "type": "string", "maxLength": 40 },
+        "status": { "type": "string", "enum": ["pending", "accepted"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "users", "requesterUid", "requesterName", "requesterAvatar", "recipientUid", "recipientName", "recipientAvatar", "status", "createdAt", "updatedAt"]
+    },
+    "RoomInvite": {
+      "title": "RoomInvite",
+      "description": "Live multiplayer room invitation sent from one friend to another",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "roomCode": { "type": "string", "maxLength": 32 },
+        "roomTitle": { "type": "string", "maxLength": 120 },
+        "senderUid": { "type": "string" },
+        "senderName": { "type": "string", "maxLength": 80 },
+        "senderAvatar": { "type": "string", "maxLength": 40 },
+        "recipientUid": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "dismissed"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "roomCode", "roomTitle", "senderUid", "senderName", "senderAvatar", "recipientUid", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/rooms/{roomCode}": {
+      "schema": "Room",
+      "description": "Public tournament room documents synchronized across participants"
+    },
+    "/publicProfiles/{userId}": {
+      "schema": "PublicProfile",
+      "description": "Public user leaderboard profiles and member role"
+    },
+    "/usersPrivate/{userId}": {
+      "schema": "PrivateUser",
+      "description": "Owner-only PII email records"
+    },
+    "/usernames/{normalizedName}": {
+      "schema": "UsernameClaim",
+      "description": "Uniqueness index for custom usernames"
+    },
+    "/tekerlemeler/{tekerlemeId}": {
+      "schema": "TekerlemeContribution",
+      "description": "Community-contributed and admin-managed tongue twisters"
+    },
+    "/winClaims/{claimId}": {
+      "schema": "WinClaim",
+      "description": "One-time receipts for multiplayer 1st place leaderboard points"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "UserNotification",
+      "description": "Status notifications for users (e.g. tekerleme approved or deleted)"
+    },
+    "/admins/{userId}": {
+      "schema": "AdminGrant",
+      "description": "Admin authorization registry"
+    },
+    "/emailDirectory/{emailHash}": {
+      "schema": "EmailDirectory",
+      "description": "Privacy-preserving SHA-256 email lookup directory for friend discovery"
+    },
+    "/friendships/{friendshipId}": {
+      "schema": "Friendship",
+      "description": "Friend requests and accepted friendships between users"
+    },
+    "/roomInvites/{inviteId}": {
+      "schema": "RoomInvite",
+      "description": "Direct room invitations sent to friends for instant notifications and joining"
+    }
+  }
+}

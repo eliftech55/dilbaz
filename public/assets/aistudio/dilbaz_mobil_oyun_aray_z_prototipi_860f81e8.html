@@ -1,0 +1,1844 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Dilbaz - Ebru & Zümrüdüanka Temalı Mobil Oyun UI</title>
+  <!-- Google Fonts: Fredoka & Poppins (Türkçe karakter tam destekli) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ==========================================================================
+       1. TEMA DEĞİŞKENLERİ VE RENK PALETİ (KONSEPT 3: EBRU & ZÜMRÜDÜANKA)
+       ========================================================================== */
+    :root {
+      --navy-deep: #0d1629;
+      --navy-primary: #14213D;
+      --navy-card: rgba(26, 42, 74, 0.78);
+      --sky-blue: #3A86FF;
+      --turquoise-glow: #00F5D4;
+      --pomegranate: #FF006E;
+      --amber-gold: #FFBE0B;
+      --cloud-light: #EDF2F4;
+      --emerald-win: #06D6A0;
+      --text-light: #F8FAFC;
+      --text-muted: #94A3B8;
+      --border-glass: rgba(255, 255, 255, 0.14);
+      --shadow-neon-blue: 0 8px 25px rgba(58, 134, 255, 0.35);
+      --shadow-neon-pink: 0 8px 25px rgba(255, 0, 110, 0.4);
+      --shadow-gold: 0 4px 15px rgba(255, 190, 11, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    body {
+      font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at top left, #1d2d50 0%, #090e1a 100%);
+      color: var(--text-light);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      overflow-x: hidden;
+    }
+
+    /* ==========================================================================
+       2. MOBİL TELEFON ÇERÇEVESİ (390x844px & TAM DUYARLI)
+       ========================================================================== */
+    .device-shell {
+      position: relative;
+      width: 100%;
+      max-width: 390px;
+      height: 844px;
+      max-height: 94vh;
+      background: var(--navy-primary);
+      border-radius: 44px;
+      border: 6px solid #24365c;
+      box-shadow:
+        0 25px 60px rgba(0, 0, 0, 0.65),
+        0 0 0 2px rgba(255, 190, 11, 0.25),
+        inset 0 0 30px rgba(58, 134, 255, 0.15);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    @media (max-width: 430px) {
+      body {
+        padding: 0;
+      }
+      .device-shell {
+        max-width: 100vw;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        border: none;
+      }
+    }
+
+    /* Dinamik Ebru Dalga Arka Planı */
+    .ebru-bg-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 85% 15%, rgba(255, 0, 110, 0.18) 0%, transparent 45%),
+        radial-gradient(circle at 15% 45%, rgba(58, 134, 255, 0.22) 0%, transparent 50%),
+        radial-gradient(circle at 75% 85%, rgba(255, 190, 11, 0.14) 0%, transparent 45%),
+        linear-gradient(170deg, #14213D 0%, #0d1629 100%);
+    }
+
+    .ebru-svg-waves {
+      position: absolute;
+      inset: -10%;
+      width: 120%;
+      height: 120%;
+      opacity: 0.26;
+      animation: ebruFloat 18s ease-in-out infinite alternate;
+    }
+
+    @keyframes ebruFloat {
+      0% { transform: translate(0, 0) rotate(0deg) scale(1); }
+      100% { transform: translate(-15px, -12px) rotate(2deg) scale(1.04); }
+    }
+
+    /* Parçacık Efektleri Canvas (Altın Rumi & Ebru Damlaları) */
+    #fxCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 50;
+      pointer-events: none;
+    }
+
+    /* ==========================================================================
+       3. ÜST BİLGİ ÇUBUĞU (TOP HUD)
+       ========================================================================== */
+    .top-hud {
+      position: relative;
+      z-index: 20;
+      padding: 16px 18px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: linear-gradient(180deg, rgba(13, 22, 41, 0.92) 0%, rgba(20, 33, 61, 0) 100%);
+    }
+
+    .hud-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(15, 25, 48, 0.85);
+      border: 1px solid var(--border-glass);
+      backdrop-filter: blur(10px);
+      padding: 6px 11px;
+      border-radius: 999px;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+
+    .nazar-hearts {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .nazar-icon {
+      width: 16px;
+      height: 16px;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
+    }
+
+    .nazar-icon.lost {
+      opacity: 0.25;
+      filter: grayscale(1);
+      transform: scale(0.8);
+    }
+
+    .akce-pill {
+      border-color: rgba(255, 190, 11, 0.4);
+      color: var(--amber-gold);
+    }
+
+    .hud-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .icon-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 1px solid var(--border-glass);
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .icon-btn:active {
+      transform: scale(0.9);
+      background: rgba(58, 134, 255, 0.3);
+    }
+
+    /* Bölüm İlerleme Çubuğu (Ebru Gradient & Altın Tüy Göstergesi) */
+    .progress-wrapper {
+      position: relative;
+      z-index: 20;
+      padding: 4px 20px 10px;
+    }
+
+    .level-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #CBD5E1;
+      margin-bottom: 6px;
+    }
+
+    .level-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--turquoise-glow);
+      letter-spacing: 0.3px;
+    }
+
+    .ebru-progress-track {
+      position: relative;
+      height: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      overflow: visible;
+    }
+
+    .ebru-progress-fill {
+      height: 100%;
+      width: 12.5%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #3A86FF 0%, #FF006E 55%, #FFBE0B 100%);
+      box-shadow: 0 0 12px rgba(255, 0, 110, 0.6);
+      transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+    }
+
+    .progress-feather-marker {
+      position: absolute;
+      right: -10px;
+      top: 50%;
+      transform: translateY(-52%);
+      width: 22px;
+      height: 22px;
+      filter: drop-shadow(0 2px 6px rgba(255, 190, 11, 0.85));
+      transition: transform 0.3s ease;
+    }
+
+    /* ==========================================================================
+       4. EKRAN YÖNETİMİ (ANA MENÜ / OYUN / BÖLÜM SONU)
+       ========================================================================== */
+    .screen {
+      position: relative;
+      z-index: 10;
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      padding: 6px 18px 20px;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+
+    .screen::-webkit-scrollbar {
+      display: none;
+    }
+
+    .screen.active {
+      display: flex;
+      animation: screenFadeIn 0.35s ease-out;
+    }
+
+    @keyframes screenFadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ==========================================================================
+       5. ANA MENÜ / HARİTA GÖRÜNÜMÜ (EBRU TAKIMYILDIZI YOLU)
+       ========================================================================== */
+    .home-hero {
+      text-align: center;
+      margin-top: 4px;
+      margin-bottom: 10px;
+    }
+
+    .brand-title {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 38px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      background: linear-gradient(135deg, #FFFFFF 15%, #FFBE0B 55%, #FF006E 95%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 4px 12px rgba(255, 0, 110, 0.3));
+      line-height: 1.1;
+    }
+
+    .brand-subtitle {
+      font-size: 12px;
+      color: #93C5FD;
+      font-weight: 500;
+      margin-top: 4px;
+      letter-spacing: 0.4px;
+    }
+
+    .hero-mascot-stage {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 4px 0 10px;
+    }
+
+    .mascot-aura {
+      position: absolute;
+      width: 145px;
+      height: 145px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(58, 134, 255, 0.32) 0%, rgba(255, 0, 110, 0.14) 55%, transparent 75%);
+      animation: pulseAura 3.5s ease-in-out infinite;
+    }
+
+    @keyframes pulseAura {
+      0%, 100% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.08); opacity: 1; }
+    }
+
+    /* Takımyıldızı Bölüm Haritası */
+    .constellation-map {
+      position: relative;
+      background: var(--navy-card);
+      border: 1px solid var(--border-glass);
+      border-radius: 26px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    .map-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--amber-gold);
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+    }
+
+    .level-nodes {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+    }
+
+    .level-node {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      cursor: pointer;
+      transition: all 0.25s ease;
+      position: relative;
+    }
+
+    .level-node.unlocked {
+      background: linear-gradient(135deg, rgba(58, 134, 255, 0.22), rgba(255, 0, 110, 0.15));
+      border-color: rgba(58, 134, 255, 0.55);
+      box-shadow: 0 4px 15px rgba(58, 134, 255, 0.2);
+    }
+
+    .level-node.unlocked:hover {
+      transform: translateY(-2px);
+    }
+
+    .level-node.locked {
+      opacity: 0.62;
+    }
+
+    .node-orb {
+      width: 38px;
+      height: 38px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Fredoka', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .level-node.unlocked .node-orb {
+      background: linear-gradient(135deg, #FFBE0B, #FF006E);
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(255, 0, 110, 0.45);
+    }
+
+    .level-node.locked .node-orb {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+    }
+
+    .node-info {
+      flex: 1;
+    }
+
+    .node-title {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 14.5px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .node-desc {
+      font-size: 11px;
+      color: #CBD5E1;
+    }
+
+    .node-tag {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(6, 214, 160, 0.2);
+      color: var(--emerald-win);
+      border: 1px solid rgba(6, 214, 160, 0.4);
+    }
+
+    .level-node.locked .node-tag {
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--text-muted);
+      border-color: transparent;
+    }
+
+    /* Ana Eylem Butonu (OYUNA BAŞLA) */
+    .btn-primary-epic {
+      width: 100%;
+      padding: 16px 20px;
+      border: none;
+      border-radius: 22px;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      color: #fff;
+      background: linear-gradient(135deg, #FF006E 0%, #FF5400 55%, #FFBE0B 100%);
+      box-shadow:
+        0 6px 0 #9d0245,
+        0 14px 28px rgba(255, 0, 110, 0.45);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      margin-top: auto;
+    }
+
+    .btn-primary-epic:active {
+      transform: translateY(4px);
+      box-shadow:
+        0 2px 0 #9d0245,
+        0 6px 14px rgba(255, 0, 110, 0.4);
+    }
+
+    /* ==========================================================================
+       6. OYUN EKRANI (AKTİF OYNANIŞ)
+       ========================================================================== */
+    /* Maskot + Konuşma Balonu Alanı */
+    .mascot-dialogue-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      min-height: 76px;
+    }
+
+    .mascot-avatar-box {
+      width: 72px;
+      height: 72px;
+      flex-shrink: 0;
+      position: relative;
+      cursor: pointer;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .mascot-avatar-box:hover {
+      transform: scale(1.06) rotate(-3deg);
+    }
+
+    .mascot-bounce {
+      animation: mascotHappy 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes mascotHappy {
+      0%, 100% { transform: translateY(0) scale(1); }
+      40% { transform: translateY(-12px) scale(1.1) rotate(5deg); }
+      70% { transform: translateY(-4px) scale(0.97) rotate(-3deg); }
+    }
+
+    .speech-bubble {
+      position: relative;
+      flex: 1;
+      background: rgba(20, 33, 61, 0.9);
+      border: 1.5px solid rgba(58, 134, 255, 0.5);
+      border-radius: 18px;
+      padding: 10px 13px;
+      font-size: 12px;
+      line-height: 1.42;
+      color: #F1F5F9;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+    }
+
+    .speech-bubble::before {
+      content: '';
+      position: absolute;
+      left: -8px;
+      top: 50%;
+      transform: translateY(-50%) rotate(45deg);
+      width: 13px;
+      height: 13px;
+      background: #14213D;
+      border-left: 1.5px solid rgba(58, 134, 255, 0.5);
+      border-bottom: 1.5px solid rgba(58, 134, 255, 0.5);
+    }
+
+    .speech-sender {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--amber-gold);
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    /* Soru Kartı (Açık Bulut Dokulu #EDF2F4 + Selçuklu/Rumi Köşe Süslemeli) */
+    .question-card {
+      position: relative;
+      background: linear-gradient(160deg, #FFFFFF 0%, #EDF2F4 100%);
+      color: #14213D;
+      border-radius: 26px;
+      padding: 18px 18px 16px;
+      margin-bottom: 12px;
+      box-shadow:
+        0 14px 30px rgba(0, 0, 0, 0.35),
+        inset 0 0 0 2px rgba(58, 134, 255, 0.22);
+      overflow: hidden;
+    }
+
+    /* Kart içi hafif Ebru Filigranı */
+    .question-card-ebru {
+      position: absolute;
+      inset: 0;
+      opacity: 0.14;
+      pointer-events: none;
+    }
+
+    /* Rumi / Selçuklu Köşe Motifleri */
+    .rumi-corner {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      opacity: 0.65;
+      pointer-events: none;
+    }
+    .rumi-tl { top: 8px; left: 8px; }
+    .rumi-tr { top: 8px; right: 8px; transform: scaleX(-1); }
+    .rumi-bl { bottom: 8px; left: 8px; transform: scaleY(-1); }
+    .rumi-br { bottom: 8px; right: 8px; transform: scale(-1, -1); }
+
+    .q-category-pill {
+      position: relative;
+      z-index: 2;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(58, 134, 255, 0.14);
+      color: #1D4ED8;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 11px;
+      border-radius: 999px;
+      margin-bottom: 8px;
+    }
+
+    .q-target-word {
+      position: relative;
+      z-index: 2;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 23px;
+      font-weight: 700;
+      color: #14213D;
+      margin-bottom: 6px;
+      line-height: 1.25;
+    }
+
+    .q-prompt-text {
+      position: relative;
+      z-index: 2;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: #334155;
+      line-height: 1.48;
+    }
+
+    .q-context-box {
+      position: relative;
+      z-index: 2;
+      margin-top: 10px;
+      padding: 8px 11px;
+      border-radius: 12px;
+      background: rgba(255, 190, 11, 0.18);
+      border-left: 3px solid #F59E0B;
+      font-size: 12px;
+      color: #78350F;
+      font-style: italic;
+      display: none;
+    }
+
+    .q-context-box.visible {
+      display: block;
+      animation: screenFadeIn 0.25s ease;
+    }
+
+    /* Joker & İpucu Çubuğu */
+    .joker-bar {
+      display: grid;
+      grid-template-columns: 1.35fr 0.9fr 1.1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .joker-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 9px 8px;
+      border-radius: 15px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(8px);
+      color: #F8FAFC;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .joker-btn:hover:not(:disabled) {
+      background: rgba(58, 134, 255, 0.25);
+      border-color: var(--sky-blue);
+    }
+
+    .joker-btn:active:not(:disabled) {
+      transform: scale(0.95);
+    }
+
+    .joker-btn:disabled {
+      opacity: 0.42;
+      cursor: not-allowed;
+    }
+
+    .joker-btn.feather-hint {
+      border-color: rgba(255, 190, 11, 0.45);
+      background: linear-gradient(135deg, rgba(255, 190, 11, 0.18), rgba(255, 0, 110, 0.15));
+      color: #FDE68A;
+    }
+
+    /* 4'lü Cevap Seçenekleri (Ebru Dokulu Modern Butonlar) */
+    .options-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      margin-top: auto;
+    }
+
+    .option-btn {
+      position: relative;
+      width: 100%;
+      text-align: left;
+      padding: 13px 14px;
+      border-radius: 18px;
+      border: 1.5px solid rgba(58, 134, 255, 0.35);
+      background:
+        radial-gradient(circle at 92% 50%, rgba(58, 134, 255, 0.16), transparent 55%),
+        rgba(20, 33, 61, 0.88);
+      color: #F8FAFC;
+      font-family: 'Poppins', sans-serif;
+      font-size: 13.5px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      cursor: pointer;
+      box-shadow: 0 4px 0 rgba(9, 15, 29, 0.85);
+      transition: all 0.18s ease;
+      overflow: hidden;
+    }
+
+    .option-btn:hover:not(:disabled) {
+      border-color: var(--turquoise-glow);
+      transform: translateY(-1px);
+      background:
+        radial-gradient(circle at 92% 50%, rgba(0, 245, 212, 0.18), transparent 60%),
+        rgba(28, 46, 84, 0.95);
+    }
+
+    .option-btn:active:not(:disabled) {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 rgba(9, 15, 29, 0.85);
+    }
+
+    .option-letter {
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      background: rgba(58, 134, 255, 0.24);
+      border: 1px solid rgba(58, 134, 255, 0.5);
+      color: #93C5FD;
+      font-family: 'Fredoka', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* Doğru & Yanlış Cevap Durumları */
+    .option-btn.correct {
+      background: linear-gradient(135deg, rgba(6, 214, 160, 0.35), rgba(255, 190, 11, 0.25));
+      border-color: var(--emerald-win);
+      box-shadow: 0 0 20px rgba(6, 214, 160, 0.45);
+      color: #FFFFFF;
+    }
+
+    .option-btn.correct .option-letter {
+      background: var(--emerald-win);
+      color: #06281E;
+      border-color: #fff;
+    }
+
+    .option-btn.wrong {
+      background: rgba(255, 0, 110, 0.28);
+      border-color: var(--pomegranate);
+      animation: pomegranateShake 0.42s ease;
+    }
+
+    .option-btn.wrong .option-letter {
+      background: var(--pomegranate);
+      color: #fff;
+      border-color: #fff;
+    }
+
+    .option-btn.eliminated {
+      opacity: 0.28;
+      pointer-events: none;
+      transform: scale(0.98);
+    }
+
+    @keyframes pomegranateShake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-7px); }
+      40% { transform: translateX(7px); }
+      60% { transform: translateX(-5px); }
+      80% { transform: translateX(5px); }
+    }
+
+    /* ==========================================================================
+       7. BÖLÜM SONU / ZAFER EKRANI (VICTORY SCREEN)
+       ========================================================================== */
+    .victory-card {
+      background: var(--navy-card);
+      border: 1.5px solid rgba(255, 190, 11, 0.45);
+      border-radius: 28px;
+      padding: 20px 18px;
+      text-align: center;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+      margin-bottom: 14px;
+    }
+
+    .victory-title {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--amber-gold);
+      margin-top: 6px;
+    }
+
+    .victory-sub {
+      font-size: 12.5px;
+      color: #CBD5E1;
+      margin-top: 3px;
+    }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .stat-box {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 10px 6px;
+    }
+
+    .stat-val {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .stat-lbl {
+      font-size: 10.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Öğrenilen Kelimeler Sözlüğü Listesi */
+    .learned-list-card {
+      background: rgba(15, 25, 48, 0.8);
+      border: 1px solid var(--border-glass);
+      border-radius: 22px;
+      padding: 14px;
+      margin-bottom: 14px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .learned-header {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--turquoise-glow);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .learned-item {
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.04);
+      margin-bottom: 6px;
+      font-size: 12px;
+      border-left: 3px solid var(--sky-blue);
+    }
+
+    .learned-item strong {
+      color: var(--amber-gold);
+      display: block;
+      font-size: 12.5px;
+    }
+
+    /* ==========================================================================
+       8. BİLGİ / AYARLAR MODALI (TÜBİTAK PROJE BİLGİSİ DAHİL)
+       ========================================================================== */
+    .modal-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 60;
+      background: rgba(9, 14, 26, 0.82);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+      animation: screenFadeIn 0.25s ease;
+    }
+
+    .modal-box {
+      width: 100%;
+      background: #14213D;
+      border: 1.5px solid rgba(58, 134, 255, 0.45);
+      border-radius: 26px;
+      padding: 20px;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6);
+    }
+
+    .modal-title {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 19px;
+      color: var(--amber-gold);
+      margin-bottom: 8px;
+    }
+
+    .modal-text {
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: #E2E8F0;
+      margin-bottom: 14px;
+    }
+
+    .btn-secondary {
+      width: 100%;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(58, 134, 255, 0.25);
+      color: #fff;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- MOBİL CİHAZ ÇERÇEVESİ (390x844px) -->
+  <div class="device-shell" id="appShell">
+
+    <!-- EBRU SANATI DALGA ARKA PLAN KATMANI -->
+    <div class="ebru-bg-layer">
+      <svg class="ebru-svg-waves" viewBox="0 0 600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="ebruGrad1" x1="0" y1="0" x2="600" y2="900" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#3A86FF" stop-opacity="0.55"/>
+            <stop offset="50%" stop-color="#FF006E" stop-opacity="0.45"/>
+            <stop offset="100%" stop-color="#FFBE0B" stop-opacity="0.45"/>
+          </linearGradient>
+          <linearGradient id="ebruGrad2" x1="600" y1="0" x2="0" y2="900" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#00F5D4" stop-opacity="0.4"/>
+            <stop offset="100%" stop-color="#3A86FF" stop-opacity="0.2"/>
+          </linearGradient>
+        </defs>
+        <!-- Battal & Gelgit Ebru Kıvrımları -->
+        <path d="M-80 120 C 120 40, 260 260, 460 150 C 580 80, 640 220, 700 180 L 700 320 C 520 390, 340 190, 140 300 C 20 365, -40 280, -80 260 Z" fill="url(#ebruGrad1)"/>
+        <path d="M-60 440 C 150 350, 280 560, 500 430 C 610 365, 650 490, 700 470 L 700 610 C 490 680, 310 480, 110 590 C 10 645, -30 560, -60 540 Z" fill="url(#ebruGrad2)"/>
+        <circle cx="480" cy="210" r="55" stroke="#FFBE0B" stroke-width="2" stroke-opacity="0.35"/>
+        <circle cx="480" cy="210" r="38" stroke="#FF006E" stroke-width="1.5" stroke-opacity="0.35"/>
+        <circle cx="110" cy="690" r="70" stroke="#00F5D4" stroke-width="2" stroke-opacity="0.3"/>
+      </svg>
+    </div>
+
+    <!-- PARÇACIK EFEKT CANVAS (ALTIN RUMİ & EBRU DAMLALARI) -->
+    <canvas id="fxCanvas"></canvas>
+
+    <!-- ÜST BİLGİ ÇUBUĞU (TOP HUD) -->
+    <header class="top-hud">
+      <!-- Sol: Nazar Boncuklu Can / Enerji Göstergesi -->
+      <div class="hud-pill" title="Kalan Nazar Enerjin">
+        <div class="nazar-hearts" id="livesContainer"></div>
+      </div>
+
+      <!-- Sağ: Altın Akçe & Ses / Bilgi Butonları -->
+      <div class="hud-actions">
+        <div class="hud-pill akce-pill" title="Kazanılan Altın Akçe">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" fill="#FFBE0B" stroke="#F59E0B" stroke-width="2"/>
+            <path d="M12 6L13.8 10.2L18 12L13.8 13.8L12 18L10.2 13.8L6 12L10.2 10.2L12 6Z" fill="#78350F"/>
+          </svg>
+          <span id="akceCount">120</span>
+        </div>
+
+        <button class="icon-btn" id="btnAudioToggle" title="Sesi Aç/Kapat" aria-label="Sesi Aç veya Kapat">
+          <svg id="iconSoundOn" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+          </svg>
+          <svg id="iconSoundOff" style="display:none;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF006E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <line x1="23" y1="9" x2="17" y2="15"></line>
+            <line x1="17" y1="9" x2="23" y2="15"></line>
+          </svg>
+        </button>
+
+        <button class="icon-btn" id="btnOpenModal" title="Oyun Hakkında" aria-label="Oyun Hakkında">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- BÖLÜM İLERLEME ÇUBUĞU (EBRU GRADIENT + ALTIN TÜY) -->
+    <div class="progress-wrapper" id="progressBarArea" style="display:none;">
+      <div class="level-meta">
+        <span class="level-badge" id="hudLevelTitle">✦ Bölüm 1: Söz Ustası</span>
+        <span id="hudQuestionCounter">1 / 8</span>
+      </div>
+      <div class="ebru-progress-track">
+        <div class="ebru-progress-fill" id="ebruProgressFill">
+          <!-- Hareketli Altın Zümrüdüanka Tüyü -->
+          <svg class="progress-feather-marker" viewBox="0 0 32 32" fill="none">
+            <path d="M27 4C18 5 9 13 5 26C13 24 22 18 27 4Z" fill="url(#featherGrad)"/>
+            <path d="M5 27L24 8" stroke="#FFFBEB" stroke-width="1.8" stroke-linecap="round"/>
+            <defs>
+              <linearGradient id="featherGrad" x1="5" y1="26" x2="27" y2="4" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#FF006E"/>
+                <stop offset="0.5" stop-color="#FFBE0B"/>
+                <stop offset="1" stop-color="#00F5D4"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================================
+         EKRAN 1: ANA MENÜ / TAKIMYILDIZI BÖLÜM HARİTASI
+         ======================================================================== -->
+    <main class="screen active" id="screenHome">
+      <div class="home-hero">
+        <h1 class="brand-title">DİLBAZ</h1>
+        <p class="brand-subtitle">Türkçenin Söz Hazinesi & Zümrüdüanka Yolculuğu</p>
+      </div>
+
+      <!-- Dilbaz Ebru Papağanı Maskot Sahnesi -->
+      <div class="hero-mascot-stage">
+        <div class="mascot-aura"></div>
+        <div id="homeMascotSlot" style="position:relative; z-index:2; width:126px; height:126px;"></div>
+      </div>
+
+      <!-- Ebru Takımyıldızı Bölüm Yolu -->
+      <section class="constellation-map">
+        <div class="map-header">
+          <span>✦ SÖZ USTALIĞI HARİTASI</span>
+          <span>Bölüm 1/4</span>
+        </div>
+        <div class="level-nodes">
+          <div class="level-node unlocked" onclick="startGame()">
+            <div class="node-orb">1</div>
+            <div class="node-info">
+              <div class="node-title">Kelime Avcısı</div>
+              <div class="node-desc">Zengin Türkçe sözcükler ve anlam incelikleri</div>
+            </div>
+            <span class="node-tag">AÇIK</span>
+          </div>
+
+          <div class="level-node unlocked" onclick="startGame()">
+            <div class="node-orb">2</div>
+            <div class="node-info">
+              <div class="node-title">Deyim Ustası</div>
+              <div class="node-desc">Dilimize renk katan mecazlı deyimler</div>
+            </div>
+            <span class="node-tag">AÇIK</span>
+          </div>
+
+          <div class="level-node locked" onclick="notifyLocked()">
+            <div class="node-orb">3</div>
+            <div class="node-info">
+              <div class="node-title">Atasözü Kâşifi</div>
+              <div class="node-desc">Atalarımızın bilgelik mirası</div>
+            </div>
+            <span class="node-tag">Bölüm 2 Sonrası</span>
+          </div>
+
+          <div class="level-node locked" onclick="notifyLocked()">
+            <div class="node-orb">4</div>
+            <div class="node-info">
+              <div class="node-title">Dilbaz Bilgesi</div>
+              <div class="node-desc">Zümrüdüanka zirvesi büyük sınavı</div>
+            </div>
+            <span class="node-tag">KİLİTLİ</span>
+          </div>
+        </div>
+      </section>
+
+      <button class="btn-primary-epic" onclick="startGame()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+        OYUNA BAŞLA
+      </button>
+    </main>
+
+    <!-- ========================================================================
+         EKRAN 2: AKTİF OYUN EKRANI
+         ======================================================================== -->
+    <section class="screen" id="screenGame">
+      <!-- Maskot ve Dinamik Konuşma Balonu -->
+      <div class="mascot-dialogue-row">
+        <div class="mascot-avatar-box" id="gameMascotSlot" onclick="petMascot()" title="Dilbaz'a dokun!"></div>
+        <div class="speech-bubble">
+          <span class="speech-sender">Dilbaz Ebru Papağanı</span>
+          <span id="mascotSpeechText">Hoş geldin Söz Yolcusu! Soruyu dikkatle oku, ebru tüylerim sana şans getirsin!</span>
+        </div>
+      </div>
+
+      <!-- Açık Bulut Dokulu & Rumi Köşe Süslemeli Soru Kartı -->
+      <article class="question-card" id="questionCard">
+        <!-- Kart İçi Ebru Desen Filigranı -->
+        <svg class="question-card-ebru" viewBox="0 0 400 260" fill="none">
+          <path d="M-20 40 C 90 -10, 180 120, 310 50 C 370 20, 410 70, 430 60 L 430 140 C 300 180, 180 70, 50 130 Z" fill="#3A86FF"/>
+          <path d="M-20 180 C 110 130, 230 240, 420 160 L 420 260 L -20 260 Z" fill="#FF006E"/>
+        </svg>
+
+        <!-- Selçuklu / Rumi Köşe Süslemeleri -->
+        <svg class="rumi-corner rumi-tl" viewBox="0 0 32 32" fill="none">
+          <path d="M2 24V8C2 4.686 4.686 2 8 2H24M2 14C7 14 14 7 14 2M6 6L11 11" stroke="#3A86FF" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <svg class="rumi-corner rumi-tr" viewBox="0 0 32 32" fill="none">
+          <path d="M2 24V8C2 4.686 4.686 2 8 2H24M2 14C7 14 14 7 14 2M6 6L11 11" stroke="#3A86FF" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <svg class="rumi-corner rumi-bl" viewBox="0 0 32 32" fill="none">
+          <path d="M2 24V8C2 4.686 4.686 2 8 2H24M2 14C7 14 14 7 14 2M6 6L11 11" stroke="#FF006E" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <svg class="rumi-corner rumi-br" viewBox="0 0 32 32" fill="none">
+          <path d="M2 24V8C2 4.686 4.686 2 8 2H24M2 14C7 14 14 7 14 2M6 6L11 11" stroke="#FF006E" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+
+        <div class="q-category-pill" id="qCategoryTag">✦ Sözcük Anlamı</div>
+        <h2 class="q-target-word" id="qTargetTitle">Mütevazı</h2>
+        <p class="q-prompt-text" id="qPromptText">Aşağıdakilerden hangisi bu sözcüğün anlamını en doğru şekilde ifade eder?</p>
+
+        <!-- Örnek Cümle / Açıklama Kutusu -->
+        <div class="q-context-box" id="qContextBox"></div>
+      </article>
+
+      <!-- İpucu & Joker Çubuğu -->
+      <div class="joker-bar">
+        <button class="joker-btn feather-hint" id="btnFeatherHint" onclick="useFeatherHint()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path>
+            <line x1="16" y1="8" x2="2" y2="22"></line>
+          </svg>
+          <span>Ebru Tüyü (2 Şık)</span>
+        </button>
+
+        <button class="joker-btn" id="btnFiftyFifty" onclick="useFiftyFifty()">
+          <span>%50 Ele</span>
+        </button>
+
+        <button class="joker-btn" id="btnContextToggle" onclick="toggleContextClue()">
+          <span>Örnek Cümle</span>
+        </button>
+      </div>
+
+      <!-- 4'lü Ebru Dokulu Cevap Seçenekleri -->
+      <div class="options-grid" id="optionsContainer"></div>
+    </section>
+
+    <!-- ========================================================================
+         EKRAN 3: BÖLÜM SONU / ZAFER EKRANI
+         ======================================================================== -->
+    <section class="screen" id="screenVictory">
+      <div class="victory-card">
+        <div id="victoryMascotSlot" style="width:96px; height:96px; margin:0 auto;"></div>
+        <h2 class="victory-title">TEBRİKLER SÖZ USTASI!</h2>
+        <p class="victory-sub">Zümrüdüanka'nın bilgeliğiyle bu bölümü tamamladın.</p>
+
+        <div class="stats-row">
+          <div class="stat-box">
+            <div class="stat-val" style="color:#FFBE0B;" id="vicAkce">+80</div>
+            <div class="stat-lbl">Kazanılan Akçe</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" style="color:#06D6A0;" id="vicAccuracy">%100</div>
+            <div class="stat-lbl">Doğruluk</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" style="color:#3A86FF;" id="vicLearnedCount">8</div>
+            <div class="stat-lbl">Söz Hazinesi</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Öğrenilen Kelimeler & Deyimler Özeti -->
+      <div class="learned-list-card">
+        <div class="learned-header">
+          <span>✦ Bu Bölümde Pekiştirilen Söz Varlığı</span>
+        </div>
+        <div id="learnedSummaryList"></div>
+      </div>
+
+      <button class="btn-primary-epic" onclick="restartNextLevel()">
+        <span>SONRAKİ BÖLÜM</span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+          <polyline points="12 5 19 12 12 19"></polyline>
+        </svg>
+      </button>
+    </section>
+
+    <!-- BİLGİ / PROJE HAKKINDA MODALI -->
+    <div class="modal-overlay" id="infoModal">
+      <div class="modal-box">
+        <h3 class="modal-title">✦ Dilbaz Hakkında</h3>
+        <p class="modal-text">
+          <strong>Dilbaz</strong>, Türkçenin zengin söz varlığını, deyimlerini ve atasözlerini geleneksel <em>Ebru sanatı</em> ve <em>Zümrüdüanka</em> mitolojisinden ilham alan modern bir oyun deneyimiyle birleştirir.<br><br>
+          <strong>Tasarım Konsepti:</strong> Gece Laciverti & Gök Mavisi zemin üzerinde Nar Çiçeği ve Kehribar vurgular; Selçuklu Rumi köşe motifleri ve etkileşimli Ebru Tüyü ipuçları.
+        </p>
+        <button class="btn-secondary" onclick="closeModal()">Anladım, Oyuna Dön</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==========================================================================
+       9. JAVASCRIPT: OYUN MANTIĞI, SVG MASKOT, SES EFEKTLERİ VE PARÇACIK MOTORU
+       ========================================================================== -->
+  <script>
+    /* ------------------------------------------------------------------------
+       A. ÖZEL VEKTÖREL SVG MASKOT ÜRETİCİ ("DİLBAZ EBRU PAPAĞANI")
+       ------------------------------------------------------------------------ */
+    function getParrotSVG(mood = 'happy') {
+      const eyeExpression = mood === 'sad'
+        ? `<path d="M56 38 L64 42 M64 38 L56 42" stroke="#14213D" stroke-width="2.5" stroke-linecap="round"/>`
+        : `<circle cx="60" cy="40" r="5" fill="#14213D"/>
+           <circle cx="61.8" cy="38.5" r="1.8" fill="#FFFFFF"/>`;
+
+      return `
+        <svg viewBox="0 0 120 120" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="parrotBody" x1="35" y1="20" x2="85" y2="95" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#3A86FF"/>
+              <stop offset="60%" stop-color="#1D4ED8"/>
+              <stop offset="100%" stop-color="#14213D"/>
+            </linearGradient>
+            <linearGradient id="ebruWing" x1="30" y1="45" x2="75" y2="85" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#FF006E"/>
+              <stop offset="50%" stop-color="#FFBE0B"/>
+              <stop offset="100%" stop-color="#00F5D4"/>
+            </linearGradient>
+            <linearGradient id="beakGold" x1="70" y1="38" x2="90" y2="52" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#FFBE0B"/>
+              <stop offset="100%" stop-color="#F59E0B"/>
+            </linearGradient>
+          </defs>
+
+          <!-- Dalgalanan Ebru Kuyruk Tüyleri -->
+          <path d="M42 82 C 24 94, 14 106, 18 114 C 28 110, 38 98, 48 86 Z" fill="#FF006E"/>
+          <path d="M48 85 C 34 99, 28 112, 34 117 C 42 111, 48 98, 54 87 Z" fill="#FFBE0B"/>
+          <path d="M54 86 C 46 101, 44 113, 50 116 C 56 109, 58 97, 60 86 Z" fill="#00F5D4"/>
+
+          <!-- Zümrüdüanka Tacı (Tepe Tüyleri) -->
+          <path d="M52 24 C 46 10, 34 10, 32 16 C 40 16, 46 21, 49 26 Z" fill="#FF006E"/>
+          <path d="M58 22 C 56 7, 45 5, 42 11 C 49 12, 53 18, 55 24 Z" fill="#FFBE0B"/>
+          <path d="M63 23 C 65 10, 56 6, 52 11 C 57 14, 60 19, 61 24 Z" fill="#00F5D4"/>
+
+          <!-- Gövde -->
+          <path d="M40 52 C 40 30, 74 26, 76 50 C 78 72, 66 90, 48 88 C 38 86, 38 68, 40 52 Z" fill="url(#parrotBody)"/>
+
+          <!-- Ebru Desenli Parlak Kanat -->
+          <path d="M36 54 C 30 68, 38 84, 56 80 C 64 78, 66 64, 56 54 C 49 48, 40 48, 36 54 Z" fill="url(#ebruWing)"/>
+          <!-- Kanat İçi Ebru Dalga Çizgisi -->
+          <path d="M40 62 C 46 58, 52 68, 58 63" stroke="#14213D" stroke-width="2" stroke-linecap="round" opacity="0.55"/>
+          <path d="M39 70 C 46 66, 51 75, 57 71" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" opacity="0.7"/>
+
+          <!-- Göz Çevresi Beyaz Maske -->
+          <circle cx="60" cy="40" r="10" fill="#EDF2F4"/>
+          ${eyeExpression}
+
+          <!-- Kıvrımlı Altın Gaga -->
+          <path d="M72 38 C 86 38, 92 46, 86 54 C 83 49, 77 48, 72 48 Z" fill="url(#beakGold)"/>
+          <path d="M72 48 C 78 48, 82 51, 80 55 C 76 55, 72 52, 72 48 Z" fill="#D97706"/>
+
+          <!-- Boyunda Minik Nazar Boncuğu Madalyonu -->
+          <circle cx="66" cy="62" r="5" fill="#1D4ED8" stroke="#FFBE0B" stroke-width="1.5"/>
+          <circle cx="66" cy="62" r="2.2" fill="#00F5D4"/>
+          <circle cx="66" cy="62" r="1" fill="#14213D"/>
+        </svg>
+      `;
+    }
+
+    /* ------------------------------------------------------------------------
+       B. TÜRKÇE SÖZ VARLIĞI, DEYİM VE ATASÖZÜ SORU HAVUZU (ORTAOKUL DÜZEYİ)
+       ------------------------------------------------------------------------ */
+    const QUESTIONS = [
+      {
+        category: "Sözcük Anlamı",
+        word: "Mütevazı",
+        prompt: "Aşağıdakilerden hangisi 'mütevazı' sözcüğünün anlamını en doğru şekilde ifade eder?",
+        context: "Örnek: 'Büyük başarılara imza atmasına rağmen her zaman mütevazı bir insan olarak kaldı.'",
+        options: [
+          "Alçak gönüllü, gösterişten uzak kimse",
+          "Çok konuşan ve her konuda fikir yürüten",
+          "Kararsız kalan, çabuk fikir değiştiren",
+          "Sürekli geçmişteki olayları anlatan"
+        ],
+        correct: 0,
+        explanation: "Mütevazı: Alçak gönüllü, kibirli olmayan anlamına gelir."
+      },
+      {
+        category: "Deyim Bilgisi",
+        word: "Etekleri zil çalmak",
+        prompt: "Bu deyim hangi duygu durumunu anlatmak için kullanılır?",
+        context: "Örnek: 'TÜBİTAK sergisinde projesinin birinci seçildiğini duyunca etekleri zil çaldı.'",
+        options: [
+          "Büyük bir korku ve paniğe kapılmak",
+          "Çok sevinmek, mutluluktan içi içine sığmamak",
+          "Aceleyle bir yerden uzaklaşmaya çalışmak",
+          "Beklenmedik bir haber karşısında şaşırmak"
+        ],
+        correct: 1,
+        explanation: "Etekleri zil çalmak: Çok sevinmek anlamında kullanılan renkli bir deyimimizdir."
+      },
+      {
+        category: "Atasözü Bilgelik",
+        word: "Damlaya damlaya göl olur.",
+        prompt: "Bu atasözümüzle verilmek istenen temel öğüt aşağıdakilerden hangisidir?",
+        context: "İpucu: Küçük birikimlerin ve sabırlı çabaların zamanla büyük sonuçlar doğurmasını anlatır.",
+        options: [
+          "Su kaynaklarını korumak herkesin görevidir",
+          "Büyük işler ancak tek seferde yapılabilir",
+          "Küçük şeyler birikerek büyük varlıklar oluşturur",
+          "Yağmurlu havalarda tedbirli olmak gerekir"
+        ],
+        correct: 2,
+        explanation: "Küçük miktarlardaki birikimlerin zamanla büyük değerlere ulaşacağını vurgular."
+      },
+      {
+        category: "Sözcük Anlamı",
+        word: "Feragat etmek",
+        prompt: "'Feragat etmek' söz öbeğinin Türkçe karşılığı aşağıdakilerden hangisidir?",
+        context: "Örnek: 'Takım arkadaşının öne çıkması için kendi hakkından feragat etti.'",
+        options: [
+          "Bir hakkından veya isteğinden kendi rızasıyla vazgeçmek",
+          "Yeni bir yolculuk için hazırlık yapmak",
+          "Zor bir görevi tek başına üstlenmek",
+          "Eski bir eseri aslına uygun onarmak"
+        ],
+        correct: 0,
+        explanation: "Feragat etmek: Kendi isteğiyle bir haktan veya çıkardan vazgeçmektir."
+      },
+      {
+        category: "Deyim Bilgisi",
+        word: "Kılı kırk yarmak",
+        prompt: "Bir iş yaparken 'kılı kırk yaran' bir kişi nasıl davranmaktadır?",
+        context: "Örnek: 'Metni yayımlamadan önce kılı kırk yararak her kelimesini tek tek inceledi.'",
+        options: [
+          "İşi bir an önce bitirmek için acele etmektedir",
+          "En ince ayrıntısına kadar titizlikle incelemektedir",
+          "Karar verirken başkalarının fikrini sormaktadır",
+          "Zorluklar karşısında kolayca pes etmektedir"
+        ],
+        correct: 1,
+        explanation: "Kılı kırk yarmak: Aşırı derecede titiz ve özenli davranmak demektir."
+      },
+      {
+        category: "Sözcük Anlamı",
+        word: "Dilbaz",
+        prompt: "Oyunumuza da adını veren 'Dilbaz' kelimesinin anlamı nedir?",
+        context: "Örnek: 'Konuşmasıyla herkesi etkileyen, tatlı dilli ve söz ustası bir dilbazdı.'",
+        options: [
+          "Yalnızca yabancı dilleri araştıran bilim insanı",
+          "Söz söylemesini iyi bilen, tatlı dilli, konuşkan kimse",
+          "Sessiz kalmayı tercih eden çekingen kişi",
+          "Eski yazıtları okuyan tarih araştırmacısı"
+        ],
+        correct: 1,
+        explanation: "Dilbaz: Güzel konuşan, söz ustası, tatlı dilli kimse anlamına gelir."
+      },
+      {
+        category: "Atasözü Bilgelik",
+        word: "Bir elin nesi var, iki elin sesi var.",
+        prompt: "Bu atasözü aşağıdaki kavramlardan hangisinin önemini vurgular?",
+        context: "İpucu: Tek başına başarılamayacak işlerin birlikte kolayca çözüleceğini anlatır.",
+        options: [
+          "Dayanışma ve iş birliği",
+          "Bireysel rekabet ve hız",
+          "Tasarruf ve tutumluluk",
+          "Sabır ve bekleyiş"
+        ],
+        correct: 0,
+        explanation: "Başarıya ulaşmak için birlik olmanın ve dayanışmanın gücünü anlatır."
+      },
+      {
+        category: "Deyim Bilgisi",
+        word: "Göz boyamak",
+        prompt: "'Göz boyamak' deyimi hangi durumda kullanılır?",
+        context: "Örnek: 'Sadece dış görünüşü süsleyerek kimsenin gözünü boyayamazsın.'",
+        options: [
+          "Güzel sanatlar alanında ustalaşmak",
+          "Gösterişle kandırmak, gerçeği olduğundan farklı göstermek",
+          "Birine çok değerli bir armağan sunmak",
+          "Uzaktaki bir nesneyi dikkatle seçmek"
+        ],
+        correct: 1,
+        explanation: "Göz boyamak: Gösterişle aldatmak, kusurları gizleyip iyi görünmeye çalışmaktır."
+      }
+    ];
+
+    /* ------------------------------------------------------------------------
+       C. WEB AUDIO API SENTEZLENMİŞ SES EFEKTLERİ (HARİCİ DOSYA GEREKTİRMEZ)
+       ------------------------------------------------------------------------ */
+    let audioCtx = null;
+    let isMuted = false;
+
+    function playTone(type) {
+      if (isMuted) return;
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (type === 'tap') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(520, now);
+          osc.frequency.exponentialRampToValueAtTime(760, now + 0.08);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+          osc.start(now);
+          osc.stop(now + 0.09);
+        } else if (type === 'correct') {
+          // Neşeli Zümrüdüanka Çanı (Arpej)
+          const notes = [523.25, 659.25, 783.99, 1046.50];
+          notes.forEach((freq, idx) => {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'triangle';
+            o.frequency.setValueAtTime(freq, now + idx * 0.07);
+            g.gain.setValueAtTime(0.15, now + idx * 0.07);
+            g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.28);
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.start(now + idx * 0.07);
+            o.stop(now + idx * 0.07 + 0.29);
+          });
+        } else if (type === 'wrong') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(190, now);
+          osc.frequency.linearRampToValueAtTime(125, now + 0.25);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+          osc.start(now);
+          osc.stop(now + 0.27);
+        } else if (type === 'hint') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, now);
+          osc.frequency.exponentialRampToValueAtTime(1320, now + 0.18);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+          osc.start(now);
+          osc.stop(now + 0.2);
+        }
+      } catch (e) {
+        // Ses desteği kısıtlı ortamlarda sessizce devam et
+      }
+    }
+
+    /* ------------------------------------------------------------------------
+       D. PARÇACIK MOTORU (ALTIN RUMİ MOTİFLERİ & EBRU DAMLALARI)
+       ------------------------------------------------------------------------ */
+    const canvas = document.getElementById('fxCanvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+
+    function resizeCanvas() {
+      const shell = document.getElementById('appShell');
+      canvas.width = shell.clientWidth;
+      canvas.height = shell.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function spawnCelebrationParticles(originX, originY, count = 34) {
+      const colors = ['#FFBE0B', '#FF006E', '#3A86FF', '#00F5D4', '#FFFFFF'];
+      for (let i = 0; i < count; i++) {
+        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+        const speed = 2.5 + Math.random() * 5.5;
+        particles.push({
+          x: originX,
+          y: originY,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 1.5,
+          size: 4 + Math.random() * 5,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          alpha: 1,
+          rotation: Math.random() * Math.PI * 2,
+          rotSpeed: (Math.random() - 0.5) * 0.15,
+          shape: i % 2 === 0 ? 'rumi' : 'droplet'
+        });
+      }
+    }
+
+    function updateAndDrawParticles() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.14; // Hafif yerçekimi
+        p.alpha -= 0.018;
+        p.rotation += p.rotSpeed;
+
+        if (p.alpha <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+        ctx.fillStyle = p.color;
+
+        if (p.shape === 'rumi') {
+          // Stilize 4 köşeli Selçuklu / Rumi yıldız yaprağı
+          ctx.beginPath();
+          ctx.moveTo(0, -p.size * 1.4);
+          ctx.quadraticCurveTo(p.size * 0.5, -p.size * 0.5, p.size * 1.4, 0);
+          ctx.quadraticCurveTo(p.size * 0.5, p.size * 0.5, 0, p.size * 1.4);
+          ctx.quadraticCurveTo(-p.size * 0.5, p.size * 0.5, -p.size * 1.4, 0);
+          ctx.quadraticCurveTo(-p.size * 0.5, -p.size * 0.5, 0, -p.size * 1.4);
+          ctx.fill();
+        } else {
+          // Ebru damlası
+          ctx.beginPath();
+          ctx.arc(0, 0, p.size * 0.75, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+      requestAnimationFrame(updateAndDrawParticles);
+    }
+    requestAnimationFrame(updateAndDrawParticles);
+
+    /* ------------------------------------------------------------------------
+       E. OYUN DURUMU (STATE) VE AKIŞ YÖNETİMİ
+       ------------------------------------------------------------------------ */
+    let state = {
+      lives: 5,
+      maxLives: 5,
+      akce: 120,
+      currentIndex: 0,
+      correctCount: 0,
+      answered: false,
+      featherUsed: false,
+      fiftyUsed: false
+    };
+
+    const LETTERS = ['A', 'B', 'C', 'D'];
+    const PRAISE_MESSAGES = [
+      "Harikasın! Zümrüdüanka'nın tüyleri seninle parlıyor!",
+      "Söz ustalığın göz kamaştırıyor, tam isabet!",
+      "Ne güzel bildin! Türkçenin inceliklerine hâkimsin.",
+      "Muhteşem! Ebru damlaları senin için dans ediyor!"
+    ];
+
+    function renderLives() {
+      const container = document.getElementById('livesContainer');
+      container.innerHTML = '';
+      for (let i = 0; i < state.maxLives; i++) {
+        const lostClass = i >= state.lives ? 'lost' : '';
+        container.innerHTML += `
+          <svg class="nazar-icon ${lostClass}" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" fill="#1D4ED8" stroke="#93C5FD" stroke-width="1.5"/>
+            <circle cx="12" cy="12" r="6" fill="#FFFFFF"/>
+            <circle cx="12" cy="12" r="3.5" fill="#00F5D4"/>
+            <circle cx="12" cy="12" r="1.6" fill="#14213D"/>
+          </svg>
+        `;
+      }
+    }
+
+    function animateAkce(amount) {
+      const target = state.akce + amount;
+      const el = document.getElementById('akceCount');
+      const step = amount > 0 ? 1 : -1;
+      const timer = setInterval(() => {
+        if (state.akce === target) {
+          clearInterval(timer);
+        } else {
+          state.akce += step;
+          el.textContent = state.akce;
+        }
+      }, 25);
+    }
+
+    function switchScreen(screenId) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(screenId).classList.add('active');
+      document.getElementById('progressBarArea').style.display =
+        screenId === 'screenGame' ? 'block' : 'none';
+    }
+
+    function startGame() {
+      playTone('tap');
+      state.currentIndex = 0;
+      state.correctCount = 0;
+      state.lives = 5;
+      renderLives();
+      switchScreen('screenGame');
+      loadQuestion();
+    }
+
+    function notifyLocked() {
+      playTone('wrong');
+      const heroSub = document.querySelector('.brand-subtitle');
+      heroSub.textContent = "✦ Önce 1. ve 2. bölümleri tamamlayarak kilidi aç!";
+      heroSub.style.color = "#FFBE0B";
+      setTimeout(() => {
+        heroSub.textContent = "Türkçenin Söz Hazinesi & Zümrüdüanka Yolculuğu";
+        heroSub.style.color = "#93C5FD";
+      }, 2200);
+    }
+
+    function loadQuestion() {
+      const q = QUESTIONS[state.currentIndex];
+      state.answered = false;
+      state.featherUsed = false;
+      state.fiftyUsed = false;
+
+      // İlerleme çubuğu güncelleme
+      const pct = ((state.currentIndex + 1) / QUESTIONS.length) * 100;
+      document.getElementById('ebruProgressFill').style.width = `${pct}%`;
+      document.getElementById('hudQuestionCounter').textContent = `${state.currentIndex + 1} / ${QUESTIONS.length}`;
+
+      // Maskot & Kart metinleri
+      document.getElementById('gameMascotSlot').innerHTML = getParrotSVG('happy');
+      document.getElementById('mascotSpeechText').textContent =
+        state.currentIndex === 0
+          ? "Hoş geldin Söz Yolcusu! İlk sorumuzla Türkçenin derinliklerine dalalım."
+          : "Yeni soru hazır! İstersen 'Ebru Tüyü' ipucunu kullanabilirsin.";
+
+      document.getElementById('qCategoryTag').textContent = `✦ ${q.category}`;
+      document.getElementById('qTargetTitle').textContent = q.word;
+      document.getElementById('qPromptText').textContent = q.prompt;
+
+      const ctxBox = document.getElementById('qContextBox');
+      ctxBox.textContent = q.context;
+      ctxBox.classList.remove('visible');
+
+      // Joker butonlarını sıfırla
+      document.getElementById('btnFeatherHint').disabled = false;
+      document.getElementById('btnFiftyFifty').disabled = false;
+
+      // Şıkları oluştur
+      const optContainer = document.getElementById('optionsContainer');
+      optContainer.innerHTML = '';
+      q.options.forEach((optText, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'option-btn';
+        btn.dataset.index = idx;
+        btn.innerHTML = `
+          <span class="option-letter">${LETTERS[idx]}</span>
+          <span>${optText}</span>
+        `;
+        btn.onclick = () => handleAnswer(idx, btn);
+        optContainer.appendChild(btn);
+      });
+    }
+
+    function handleAnswer(selectedIdx, btnElement) {
+      if (state.answered) return;
+      state.answered = true;
+
+      const q = QUESTIONS[state.currentIndex];
+      const allBtns = document.querySelectorAll('.option-btn');
+      const mascotSlot = document.getElementById('gameMascotSlot');
+      const speech = document.getElementById('mascotSpeechText');
+
+      if (selectedIdx === q.correct) {
+        // DOĞRU CEVAP
+        playTone('correct');
+        btnElement.classList.add('correct');
+        state.correctCount++;
+        animateAkce(15);
+
+        // Altın Rumi & Ebru Damlaları Patlaması
+        const rect = btnElement.getBoundingClientRect();
+        const shellRect = document.getElementById('appShell').getBoundingClientRect();
+        spawnCelebrationParticles(
+          rect.left - shellRect.left + rect.width / 2,
+          rect.top - shellRect.top + rect.height / 2,
+          36
+        );
+
+        mascotSlot.classList.remove('mascot-bounce');
+        void mascotSlot.offsetWidth;
+        mascotSlot.classList.add('mascot-bounce');
+
+        const randomPraise = PRAISE_MESSAGES[Math.floor(Math.random() * PRAISE_MESSAGES.length)];
+        speech.textContent = `${randomPraise} (+15 Akçe)`;
+      } else {
+        // YANLIŞ CEVAP
+        playTone('wrong');
+        btnElement.classList.add('wrong');
+        allBtns[q.correct].classList.add('correct');
+
+        if (state.lives > 1) {
+          state.lives--;
+          renderLives();
+        }
+        mascotSlot.innerHTML = getParrotSVG('sad');
+        speech.textContent = `Üzülme! Doğrusu: ${q.explanation}`;
+      }
+
+      // Diğer butonları kilitle
+      allBtns.forEach(b => b.disabled = true);
+
+      // Sonraki soruya geçiş
+      setTimeout(() => {
+        if (state.currentIndex < QUESTIONS.length - 1) {
+          state.currentIndex++;
+          loadQuestion();
+        } else {
+          showVictoryScreen();
+        }
+      }, 1750);
+    }
+
+    /* ------------------------------------------------------------------------
+       F. İPUCU VE JOKER FONKSİYONLARI
+       ------------------------------------------------------------------------ */
+    function eliminateTwoWrongOptions() {
+      const q = QUESTIONS[state.currentIndex];
+      const buttons = Array.from(document.querySelectorAll('.option-btn'));
+      const wrongButtons = buttons.filter(b => Number(b.dataset.index) !== q.correct && !b.classList.contains('eliminated'));
+      // Rastgele 2 yanlış şıkkı ele
+      wrongButtons.sort(() => Math.random() - 0.5).slice(0, 2).forEach(b => {
+        b.classList.add('eliminated');
+      });
+    }
+
+    function useFeatherHint() {
+      if (state.answered || state.featherUsed) return;
+      playTone('hint');
+      state.featherUsed = true;
+      document.getElementById('btnFeatherHint').disabled = true;
+      eliminateTwoWrongOptions();
+      document.getElementById('qContextBox').classList.add('visible');
+      document.getElementById('mascotSpeechText').textContent =
+        "Ebru Tüyü parladı! İki yanlış şıkkı sildim ve örnek cümleyi açtım.";
+
+      const shell = document.getElementById('appShell');
+      spawnCelebrationParticles(shell.clientWidth * 0.25, shell.clientHeight * 0.55, 18);
+    }
+
+    function useFiftyFifty() {
+      if (state.answered || state.fiftyUsed) return;
+      playTone('hint');
+      state.fiftyUsed = true;
+      document.getElementById('btnFiftyFifty').disabled = true;
+      eliminateTwoWrongOptions();
+      document.getElementById('mascotSpeechText').textContent =
+        "%50 Jokeri kullanıldı! İki seçenek elendi, doğru cevaba çok yakınsın.";
+    }
+
+    function toggleContextClue() {
+      playTone('tap');
+      const box = document.getElementById('qContextBox');
+      box.classList.toggle('visible');
+    }
+
+    function petMascot() {
+      playTone('tap');
+      const slot = document.getElementById('gameMascotSlot');
+      slot.classList.remove('mascot-bounce');
+      void slot.offsetWidth;
+      slot.classList.add('mascot-bounce');
+      document.getElementById('mascotSpeechText').textContent =
+        "Cik cik! Tüylerimi okşadığın için teşekkürler, haydi soruyu çözelim!";
+    }
+
+    /* ------------------------------------------------------------------------
+       G. BÖLÜM SONU / ZAFER EKRANI
+       ------------------------------------------------------------------------ */
+    function showVictoryScreen() {
+      playTone('correct');
+      switchScreen('screenVictory');
+
+      const accuracy = Math.round((state.correctCount / QUESTIONS.length) * 100);
+      const earnedAkce = state.correctCount * 15;
+
+      document.getElementById('vicAkce').textContent = `+${earnedAkce}`;
+      document.getElementById('vicAccuracy').textContent = `%${accuracy}`;
+      document.getElementById('vicLearnedCount').textContent = QUESTIONS.length;
+
+      const listEl = document.getElementById('learnedSummaryList');
+      listEl.innerHTML = QUESTIONS.map(item => `
+        <div class="learned-item">
+          <strong>${item.word} (${item.category})</strong>
+          <span>${item.explanation}</span>
+        </div>
+      `).join('');
+
+      const shell = document.getElementById('appShell');
+      spawnCelebrationParticles(shell.clientWidth * 0.5, shell.clientHeight * 0.25, 55);
+    }
+
+    function restartNextLevel() {
+      playTone('tap');
+      switchScreen('screenHome');
+    }
+
+    /* ------------------------------------------------------------------------
+       H. MODAL VE BAŞLANGIÇ KURULUMU
+       ------------------------------------------------------------------------ */
+    document.getElementById('btnAudioToggle').onclick = () => {
+      isMuted = !isMuted;
+      document.getElementById('iconSoundOn').style.display = isMuted ? 'none' : 'block';
+      document.getElementById('iconSoundOff').style.display = isMuted ? 'block' : 'none';
+    };
+
+    document.getElementById('btnOpenModal').onclick = () => {
+      playTone('tap');
+      document.getElementById('infoModal').classList.add('open');
+    };
+
+    function closeModal() {
+      playTone('tap');
+      document.getElementById('infoModal').classList.remove('open');
+    }
+
+    // Sayfa yüklendiğinde maskotları ve can göstergesini başlat
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('homeMascotSlot').innerHTML = getParrotSVG('happy');
+      document.getElementById('victoryMascotSlot').innerHTML = getParrotSVG('happy');
+      renderLives();
+    });
+  </script>
+</body>
+</html>
