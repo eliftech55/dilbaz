@@ -2,6 +2,8 @@ import {
   GoogleAuthProvider,
   EmailAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   linkWithCredential,
@@ -75,12 +77,36 @@ export async function checkIsAdmin(user: User | null): Promise<boolean> {
   }
 }
 
-export async function signInWithGoogle(): Promise<User> {
+export async function signInWithGoogle(): Promise<User | null> {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  const cred = await signInWithPopup(auth, provider);
-  await ensurePrivateUserRecord(cred.user, 'google.com');
-  return cred.user;
+  try {
+    const cred = await signInWithPopup(auth, provider);
+    await ensurePrivateUserRecord(cred.user, 'google.com');
+    return cred.user;
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+    if (code === 'auth/popup-blocked' && !isInIframe) {
+      await signInWithRedirect(auth, provider);
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function consumeGoogleRedirectResult(): Promise<User | null> {
+  try {
+    const cred = await getRedirectResult(auth);
+    if (cred?.user) {
+      await ensurePrivateUserRecord(cred.user, 'google.com');
+      return cred.user;
+    }
+    return null;
+  } catch (err) {
+    console.warn('Google redirect result warning:', err);
+    return null;
+  }
 }
 
 export async function registerWithEmailAndPassword(email: string, password: string): Promise<User> {

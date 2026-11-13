@@ -19,7 +19,8 @@ import {
   subscribeToMyNotifications,
   markNotificationRead,
   deleteNotification,
-  checkIsAdmin
+  checkIsAdmin,
+  consumeGoogleRedirectResult
 } from './firebase/authService';
 import {
   subscribeToApprovedTekerlemeler,
@@ -215,6 +216,7 @@ export default function App() {
     let unsubFriends: (() => void) | null = null;
     let unsubInvites: (() => void) | null = null;
 
+    consumeGoogleRedirectResult();
     const unsubAuth = subscribeToAuth(async (user) => {
       setAuthUser(user);
       if (unsubProfile) {

@@ -75,6 +75,24 @@ export function getFriendlyAuthError(err: unknown): { message: string; needsEmai
   if (code === 'auth/invalid-email') {
     return { message: 'Lütfen geçerli bir e-posta adresi girin.' };
   }
+  if (code === 'auth/popup-blocked') {
+    return {
+      message:
+        'Tarayıcı veya telefon açılır Google giriş penceresini (popup) engelledi. Adres çubuğundan açılır pencerelere izin verip tekrar deneyin veya aşağıdaki "E-posta ile Giriş Yap" bölümünü kullanın.'
+    };
+  }
+  if (code === 'auth/cancelled-popup-request') {
+    return { message: 'Önceki giriş penceresi iptal edildi. Lütfen tekrar tıklayın.' };
+  }
+  if (code === 'auth/unauthorized-domain') {
+    const host = typeof window !== 'undefined' ? window.location.hostname : '';
+    return {
+      message: `Bu alan adı (${host}) Firebase Authentication yetkili alan adları listesinde ekli değil. Firebase Console > Authentication > Settings > Authorized domains bölümüne ekleyin.`
+    };
+  }
+  if (code === 'auth/network-request-failed') {
+    return { message: 'İnternet bağlantısı kurulamadı. Bağlantınızı kontrol edip tekrar deneyin.' };
+  }
   if (code === 'auth/popup-closed-by-user') {
     return { message: 'Google giriş penceresi kapatıldı. Tekrar deneyebilirsiniz.' };
   }

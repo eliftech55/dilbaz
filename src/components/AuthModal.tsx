@@ -114,14 +114,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   );
 
   const handleGoogleAuth = async () => {
-    playTone('tap');
     setIsBusy(true);
     setErrorMsg(null);
     setSuccessMsg(null);
     setNeedsConsoleSetup(false);
     try {
-      await signInWithGoogle();
-      playTone('correct');
+      const signedInUser = await signInWithGoogle();
+      if (signedInUser) {
+        playTone('correct');
+      }
     } catch (err) {
       const parsed = getFriendlyAuthError(err);
       setErrorMsg(parsed.message);
