@@ -90,13 +90,15 @@ export async function sendMobilePushNotification(
     ? `${BASE_URL}?oda=${encodeURIComponent(payload.roomCode)}`
     : BASE_URL;
 
+  const absoluteIconUrl = typeof window !== 'undefined' ? `${window.location.origin}${BASE_URL}pwa-192x192.png` : '/pwa-192x192.png';
+
   const notifOptions: NotificationOptions & {
     renotify?: boolean;
     vibrate?: number[];
   } = {
     body: payload.body,
-    icon: `${BASE_URL}pwa-192x192.png`,
-    badge: `${BASE_URL}pwa-192x192.png`,
+    icon: absoluteIconUrl,
+    badge: absoluteIconUrl,
     tag: payload.tag || `dilbaz_${Date.now()}`,
     renotify: true,
     vibrate: [180, 80, 220],

@@ -332,8 +332,13 @@ export async function saveUserProfile(params: {
 
 export async function claimMultiplayerWinReward(
   roomCode: string,
-  uid: string
+  uid: string,
+  playerCount: number
 ): Promise<{ claimed: boolean; alreadyClaimed?: boolean; reason?: string; pointsAdded: number }> {
+  if (playerCount <= 1) {
+    return { claimed: false, reason: 'solo_left', pointsAdded: 0 };
+  }
+  const dynamicPoints = Math.max(2, playerCount) * 20;
   const claimId = `${roomCode}_${uid}`;
   const claimRef = doc(db, 'winClaims', claimId);
   const profileRef = doc(db, 'publicProfiles', uid);
@@ -358,18 +363,19 @@ export async function claimMultiplayerWinReward(
     batch.set(claimRef, {
       uid,
       roomCode,
+      pointsAwarded: dynamicPoints,
       createdAt: now
     });
 
     batch.update(profileRef, {
-      points: (currentProfile.points || 0) + POINTS_FOR_MULTIPLAYER_WIN,
+      points: (currentProfile.points || 0) + dynamicPoints,
       multiplayerWins: (currentProfile.multiplayerWins || 0) + 1,
       lastClaimId: claimId,
       updatedAt: now
     });
 
     await batch.commit();
-    return { claimed: true, pointsAdded: POINTS_FOR_MULTIPLAYER_WIN };
+    return { claimed: true, pointsAdded: dynamicPoints };
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `winClaims/${claimId}`);
   }

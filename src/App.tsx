@@ -307,8 +307,8 @@ export default function App() {
             seenFriendReqIdsRef.current.add(f.id);
             playTone('notification');
             sendMobilePushNotification({
-              title: 'Yeni Arkadaşlık Teklifi!',
-              body: `${f.requesterName} sana Dilbaz'da arkadaşlık teklifi gönderdi.`,
+              title: 'Yeni Arkadaşlık Teklifi! 🤝',
+              body: `${f.requesterName} seninle Dilbaz kelime düelloları yapmak için arkadaşlık teklif etti.`,
               tag: `friend_${f.id}`,
               tab: 'friends'
             });
@@ -332,8 +332,8 @@ export default function App() {
             seenInviteKeysRef.current.add(key);
             playTone('notification');
             sendMobilePushNotification({
-              title: 'Dilbaz Oda Daveti!',
-              body: `${inv.senderName} seni ${inv.roomCode} yarışma odasına davet etti!`,
+              title: 'Dilbaz Düellosu Başlıyor! ⚔️',
+              body: `${inv.senderName} seni Dilbaz'da düelloya davet ediyor, acele et!`,
               tag: `invite_${inv.id}`,
               roomCode: inv.roomCode,
               tab: 'room'
@@ -362,6 +362,17 @@ export default function App() {
       avatar: userProfile.avatar
     });
   }, [authUser, userProfile]);
+
+  // Update mobile app icon badge count dynamically
+  useEffect(() => {
+    const unreadNotifs = notifications.filter((n) => !n.read).length;
+    const pendingInvites = roomInvites.filter((inv) => inv.status === 'pending').length;
+    const pendingFriends = friendships.filter(
+      (f) => f.status === 'pending' && f.recipientUid === authUser?.uid
+    ).length;
+    const totalBadge = unreadNotifs + pendingInvites + pendingFriends;
+    setAppBadgeCount(totalBadge);
+  }, [notifications, roomInvites, friendships, authUser]);
 
   // Subscribe to approved community tekerlemeler only when signed in
   useEffect(() => {

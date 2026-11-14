@@ -121,10 +121,6 @@ export class RoomFirestore {
 
     const roomData = snap.data() as Room;
 
-    if (roomData.status !== 'waiting') {
-      throw new Error('Bu odada yarışma başladı. Lobiye yeni katılımcı kabul edilmiyor.');
-    }
-
     const players = (roomData.players || []).map(p => {
       const cleanP: any = {
         id: p.id,
@@ -139,6 +135,10 @@ export class RoomFirestore {
     });
 
     const existingIndex = players.findIndex(p => p.id === player.id);
+
+    if (roomData.status !== 'waiting' && existingIndex < 0) {
+      throw new Error('Bu odada yarışma başladı. Lobiye yeni katılımcı kabul edilmiyor.');
+    }
 
     if (existingIndex >= 0) {
       players[existingIndex].name = player.name || players[existingIndex].name;
@@ -219,6 +219,10 @@ export class RoomFirestore {
 
     if (!isAuthorizedHost) {
       throw new Error('Yalnızca oda kurucusu yarışmayı başlatabilir.');
+    }
+
+    if ((roomData.players || []).length < 2) {
+      throw new Error('Yarışmayı başlatmak için en az 2 oyuncu (veya test botu) gerekiyor!');
     }
 
     const firstTekerleme = getRandomTekerleme(
