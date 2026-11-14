@@ -64,7 +64,8 @@ import { setSoundMuted, playTone } from './utils/soundEffects';
 import {
   registerServiceWorker,
   sendMobilePushNotification,
-  subscribeToNotificationClicks
+  subscribeToNotificationClicks,
+  setAppBadgeCount
 } from './utils/mobileNotifications';
 import { Users, Mic, BookOpen, Trophy, Bell, X, UserPlus, Swords, UserCheck } from 'lucide-react';
 
@@ -774,6 +775,12 @@ export default function App() {
     () => adminContributions.filter((t) => t.status === 'pending').length,
     [adminContributions]
   );
+
+  useEffect(() => {
+    const total =
+      pendingFriendsBadgeCount + unreadNotifications.length + (isAdmin ? pendingAdminCount : 0);
+    setAppBadgeCount(total);
+  }, [pendingFriendsBadgeCount, unreadNotifications.length, isAdmin, pendingAdminCount]);
 
   const acceptedFriendsSummary = useMemo(() => {
     if (!authUser) return [];

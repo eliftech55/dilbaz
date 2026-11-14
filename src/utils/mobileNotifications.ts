@@ -174,3 +174,22 @@ export function subscribeToNotificationClicks(
     window.removeEventListener('dilbaz-notification-click', onCustomClick);
   };
 }
+
+export function setAppBadgeCount(count: number): void {
+  try {
+    if (typeof navigator !== 'undefined') {
+      const nav = navigator as Navigator & {
+        setAppBadge?: (count?: number) => Promise<void>;
+        clearAppBadge?: () => Promise<void>;
+      };
+      if (count > 0 && typeof nav.setAppBadge === 'function') {
+        nav.setAppBadge(count).catch(() => {});
+      } else if (typeof nav.clearAppBadge === 'function') {
+        nav.clearAppBadge().catch(() => {});
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
