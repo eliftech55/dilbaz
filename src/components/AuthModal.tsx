@@ -647,14 +647,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
         </div>
 
-        <div className="px-6 py-3 border-t border-white/10 bg-[#0d1629]/70 text-center">
+        <div className="px-6 py-3 border-t border-white/10 bg-[#0d1629]/70 flex items-center justify-center gap-3 text-[11px]">
           <a
             href={`${import.meta.env.BASE_URL}privacy.html`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[11px] text-[#93C5FD] hover:text-[#00F5D4] underline transition-colors"
+            className="text-[#93C5FD] hover:text-[#00F5D4] underline transition-colors"
           >
-            Gizlilik Politikası (Privacy Policy)
+            Gizlilik Politikası
+          </a>
+          <span className="text-white/30">·</span>
+          <a
+            href={`${import.meta.env.BASE_URL}terms.html`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#93C5FD] hover:text-[#00F5D4] underline transition-colors"
+          >
+            Kullanım Koşulları (Terms of Service)
           </a>
         </div>
       </div>
