@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { User } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase/config';
 import { Tekerleme, UserProfile } from '../types/game';
 import {
   ADMIN_EMAIL,
@@ -50,6 +52,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [roleFilter, setRoleFilter] = useState<'all' | 'yonetici' | 'uye'>('all');
   const [confirmDeleteUid, setConfirmDeleteUid] = useState<string | null>(null);
   const [busyUid, setBusyUid] = useState<string | null>(null);
+  const [memberEmails, setMemberEmails] = useState<Record<string, string>>({});
   const [actionMsg, setActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(
     null
   );
@@ -58,6 +61,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (!isAdmin) {
       setAllMembers([]);
       setMembersLoaded(false);
+      setMemberEmails({});
       return;
     }
     setMembersError(null);
@@ -75,6 +79,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
     return () => unsub();
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin || allMembers.length === 0) return;
+    let active = true;
+    async function loadEmails() {
+      const map: Record<string, string> = {};
+      await Promise.all(
+        allMembers.map(async (m) => {
+          try {
+            const snap = await getDoc(doc(db, 'usersPrivate', m.uid));
+            if (snap.exists() && snap.data()?.email) {
+              map[m.uid] = snap.data().email;
+            }
+          } catch {
+            // ignore
+          }
+        })
+      );
+      if (active) {
+        setMemberEmails(map);
+      }
+    }
+    loadEmails();
+    return () => {
+      active = false;
+    };
+  }, [isAdmin, allMembers]);
 
   const pendingContributions = useMemo(
     () => adminContributions.filter((t) => t.status === 'pending'),
@@ -407,6 +438,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             </div>
                             <div className="text-[10px] text-[#94A3B8]">
                               {member.approvedTekerlemeCount} tekerleme · {member.multiplayerWins} 1. lik
+                              {memberEmails[member.uid] && (
+                                <span className="block text-[#00F5D4] font-mono mt-0.5">
+                                  {memberEmails[member.uid]}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
