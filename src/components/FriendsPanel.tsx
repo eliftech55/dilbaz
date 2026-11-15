@@ -316,12 +316,12 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
               <Lock className="w-7 h-7 text-[#00F5D4]" />
             </div>
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <h1 className="font-display text-2xl font-bold text-white">
-              Arkadaşlar & Canlı Oda Davetleri
+              Arkadaşlar & Düellolar
             </h1>
-            <p className="text-xs sm:text-sm text-[#CBD5E1] max-w-md mx-auto leading-relaxed">
-              E-posta adresiyle arkadaş eklemek, teklifleri kabul etmek ve arkadaşlarına telefon bildirimli yarışma daveti göndermek için giriş yapmalısın.
+            <p className="text-xs text-[#93C5FD]">
+              Arkadaş ekle, canlı davet gönder
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
@@ -346,7 +346,7 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
   return (
     <div className="max-w-3xl mx-auto space-y-5 animate-screen-in">
       {/* Header & Mobile Push Notifications Card */}
-      <div className="p-5 sm:p-6 ebru-glass-card rounded-[28px] space-y-4">
+      <div className="p-5 sm:p-6 game-card-3d rounded-[28px] space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="font-display text-2xl font-bold text-white flex items-center gap-2.5">
@@ -354,7 +354,7 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
               <span>Arkadaşlar & Davetler</span>
             </h1>
             <p className="text-xs text-[#93C5FD] mt-0.5">
-              Arkadaşlarının e-posta adresini girerek ekle, tek dokunuşla oda kurup davet gönder.
+              Tek dokunuşla düello daveti gönder
             </p>
           </div>
           <PWAInstallButton />
@@ -369,24 +369,19 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
               </div>
               <div className="space-y-0.5 text-xs">
                 <div className="font-bold text-white flex flex-wrap items-center gap-1.5">
-                  <span>Mobil & Arka Plan Bildirimleri</span>
+                  <span>Arka Plan Bildirimleri</span>
                   {notifState.permission === 'granted' && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#06D6A0]/20 text-[#06D6A0] border border-[#06D6A0]/40">
-                      İzin Açık ✓
-                    </span>
-                  )}
-                  {notifState.permission === 'granted' && bgPushDevices > 0 && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#3A86FF]/20 text-[#93C5FD] border border-[#3A86FF]/40">
-                      Kapalıyken Push Aktif ({bgPushDevices} cihaz)
+                    <span className="text-[11px] font-semibold text-[#06D6A0]">
+                      · Açık {bgPushDevices > 0 ? `(${bgPushDevices} cihaz)` : '✓'}
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] text-[#CBD5E1]">
+                <p className="text-[11px] text-[#93C5FD]">
                   {notifState.permission === 'granted'
-                    ? 'Oda davetleri ve arkadaşlık teklifleri uygulama kapalıyken bile Web Push ile Dilbaz logosuyla telefonuna düşer.'
+                    ? 'Kapalıyken bile Dilbaz logosuyla bildirim düşer.'
                     : notifState.permission === 'denied'
-                    ? 'Bildirim izni telefon/tarayıcı ayarlarından engellenmiş. Uygulama ayarlarından bildirimlere izin verebilirsin.'
-                    : 'Uygulama kapalıyken bile yarışma davetlerini Dilbaz logosuyla görmek için bildirim izni ver.'}
+                    ? 'Tarayıcı ayarlarından bildirim iznini açabilirsiniz.'
+                    : 'Davetleri kaçırmamak için bildirim izni verin.'}
                 </p>
               </div>
             </div>

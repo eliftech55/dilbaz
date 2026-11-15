@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { playTone } from '../utils/soundEffects';
+import zumruduankaHeroImg from '../assets/images/zumruduanka_hero_1794737139184.jpg';
 
 export type MascotMood = 'happy' | 'sad' | 'excited';
 
@@ -16,9 +17,10 @@ export const DilbazMascot: React.FC<DilbazMascotProps> = ({
   size = 72,
   className = '',
   onClick,
-  title = "Dilbaz'a dokun!"
+  title = "Zümrüdüanka'ya dokun!"
 }) => {
   const [bouncing, setBouncing] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
 
   const handleTap = () => {
     playTone('tap');
@@ -28,72 +30,46 @@ export const DilbazMascot: React.FC<DilbazMascotProps> = ({
     onClick?.();
   };
 
+  const auraRing =
+    mood === 'excited'
+      ? 'from-[#FFBE0B] via-[#FF006E] to-[#00F5D4] shadow-[0_0_18px_rgba(255,190,11,0.55)]'
+      : mood === 'sad'
+      ? 'from-[#3A86FF] via-[#64748B] to-[#FF006E] shadow-[0_0_12px_rgba(58,134,255,0.35)]'
+      : 'from-[#00F5D4] via-[#3A86FF] to-[#FFBE0B] shadow-[0_0_15px_rgba(0,245,212,0.45)]';
+
   return (
     <button
       type="button"
       onClick={handleTap}
       title={title}
-      className={`shrink-0 cursor-pointer transition-transform duration-300 hover:scale-105 hover:-rotate-3 focus:outline-none ${
+      className={`relative shrink-0 cursor-pointer transition-transform duration-300 hover:scale-105 hover:-rotate-2 focus:outline-none rounded-full p-[2.5px] bg-gradient-to-tr ${auraRing} ${
         bouncing ? 'animate-mascot-bounce' : ''
       } ${className}`}
       style={{ width: size, height: size }}
     >
-      <svg viewBox="0 0 120 120" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="dilbazParrotBody" x1="35" y1="20" x2="85" y2="95" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#3A86FF" />
-            <stop offset="60%" stopColor="#1D4ED8" />
-            <stop offset="100%" stopColor="#14213D" />
-          </linearGradient>
-          <linearGradient id="dilbazEbruWing" x1="30" y1="45" x2="75" y2="85" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#FF006E" />
-            <stop offset="50%" stopColor="#FFBE0B" />
-            <stop offset="100%" stopColor="#00F5D4" />
-          </linearGradient>
-          <linearGradient id="dilbazBeakGold" x1="70" y1="38" x2="90" y2="52" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#FFBE0B" />
-            <stop offset="100%" stopColor="#F59E0B" />
-          </linearGradient>
-        </defs>
-
-        {/* Dalgalanan Ebru Kuyruk Tüyleri */}
-        <path d="M42 82 C 24 94, 14 106, 18 114 C 28 110, 38 98, 48 86 Z" fill="#FF006E" />
-        <path d="M48 85 C 34 99, 28 112, 34 117 C 42 111, 48 98, 54 87 Z" fill="#FFBE0B" />
-        <path d="M54 86 C 46 101, 44 113, 50 116 C 56 109, 58 97, 60 86 Z" fill="#00F5D4" />
-
-        {/* Zümrüdüanka Tacı (Tepe Tüyleri) */}
-        <path d="M52 24 C 46 10, 34 10, 32 16 C 40 16, 46 21, 49 26 Z" fill="#FF006E" />
-        <path d="M58 22 C 56 7, 45 5, 42 11 C 49 12, 53 18, 55 24 Z" fill="#FFBE0B" />
-        <path d="M63 23 C 65 10, 56 6, 52 11 C 57 14, 60 19, 61 24 Z" fill="#00F5D4" />
-
-        {/* Gövde */}
-        <path d="M40 52 C 40 30, 74 26, 76 50 C 78 72, 66 90, 48 88 C 38 86, 38 68, 40 52 Z" fill="url(#dilbazParrotBody)" />
-
-        {/* Ebru Desenli Parlak Kanat */}
-        <path d="M36 54 C 30 68, 38 84, 56 80 C 64 78, 66 64, 56 54 C 49 48, 40 48, 36 54 Z" fill="url(#dilbazEbruWing)" />
-        <path d="M40 62 C 46 58, 52 68, 58 63" stroke="#14213D" strokeWidth="2" strokeLinecap="round" opacity="0.55" />
-        <path d="M39 70 C 46 66, 51 75, 57 71" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" opacity="0.7" />
-
-        {/* Göz Çevresi Beyaz Maske */}
-        <circle cx="60" cy="40" r="10" fill="#EDF2F4" />
-        {mood === 'sad' ? (
-          <path d="M56 38 L64 42 M64 38 L56 42" stroke="#14213D" strokeWidth="2.5" strokeLinecap="round" />
+      <div className="w-full h-full rounded-full overflow-hidden bg-[#0d1629] flex items-center justify-center">
+        {!imgFailed ? (
+          <img
+            src={zumruduankaHeroImg}
+            alt="Dilbaz Zümrüdüanka"
+            referrerPolicy="no-referrer"
+            onError={() => setImgFailed(true)}
+            className="w-full h-full object-cover scale-110"
+          />
         ) : (
-          <>
+          <svg viewBox="0 0 120 120" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M52 24 C 46 10, 34 10, 32 16 C 40 16, 46 21, 49 26 Z" fill="#FF006E" />
+            <path d="M58 22 C 56 7, 45 5, 42 11 C 49 12, 53 18, 55 24 Z" fill="#FFBE0B" />
+            <path d="M63 23 C 65 10, 56 6, 52 11 C 57 14, 60 19, 61 24 Z" fill="#00F5D4" />
+            <path d="M40 52 C 40 30, 74 26, 76 50 C 78 72, 66 90, 48 88 C 38 86, 38 68, 40 52 Z" fill="#3A86FF" />
+            <circle cx="60" cy="40" r="10" fill="#EDF2F4" />
             <circle cx="60" cy="40" r="5" fill="#14213D" />
-            <circle cx="61.8" cy="38.5" r="1.8" fill="#FFFFFF" />
-          </>
+            <path d="M72 38 C 86 38, 92 46, 86 54 C 83 49, 77 48, 72 48 Z" fill="#FFBE0B" />
+            <circle cx="66" cy="62" r="5" fill="#1D4ED8" stroke="#FFBE0B" strokeWidth="1.5" />
+            <circle cx="66" cy="62" r="2.2" fill="#00F5D4" />
+          </svg>
         )}
-
-        {/* Kıvrımlı Altın Gaga */}
-        <path d="M72 38 C 86 38, 92 46, 86 54 C 83 49, 77 48, 72 48 Z" fill="url(#dilbazBeakGold)" />
-        <path d="M72 48 C 78 48, 82 51, 80 55 C 76 55, 72 52, 72 48 Z" fill="#D97706" />
-
-        {/* Boyunda Minik Nazar Boncuğu Madalyonu */}
-        <circle cx="66" cy="62" r="5" fill="#1D4ED8" stroke="#FFBE0B" strokeWidth="1.5" />
-        <circle cx="66" cy="62" r="2.2" fill="#00F5D4" />
-        <circle cx="66" cy="62" r="1" fill="#14213D" />
-      </svg>
+      </div>
     </button>
   );
 };
@@ -108,13 +84,13 @@ interface MascotDialogueProps {
 export const MascotDialogue: React.FC<MascotDialogueProps> = ({
   message,
   mood = 'happy',
-  sender = 'Dilbaz Ebru Papağanı',
+  sender = 'Zümrüdüanka',
   onMascotTap
 }) => {
   return (
     <div className="flex items-center gap-3">
-      <DilbazMascot mood={mood} size={68} onClick={onMascotTap} />
-      <div className="relative flex-1 bg-[#14213D]/90 border-[1.5px] border-[#3A86FF]/50 rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed text-[#F1F5F9] shadow-lg speech-bubble-tail">
+      <DilbazMascot mood={mood} size={60} onClick={onMascotTap} />
+      <div className="relative flex-1 bg-gradient-to-r from-[#14213D]/95 to-[#1b2c4e]/90 border-[1.5px] border-[#3A86FF]/45 rounded-2xl px-3.5 py-2.5 text-xs leading-snug text-[#F1F5F9] shadow-lg speech-bubble-tail">
         <span className="font-display text-[11px] font-bold text-[#FFBE0B] block mb-0.5">
           {sender}
         </span>

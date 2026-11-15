@@ -65,9 +65,11 @@ import { GuideModal } from './components/GuideModal';
 import { AddTekerlemeModal } from './components/AddTekerlemeModal';
 import { AuthModal } from './components/AuthModal';
 import { AdminPanel } from './components/AdminPanel';
+import { PhoenixSanctuaryModal } from './components/PhoenixSanctuaryModal';
 import { OfflineIndicator } from './components/PWAInstallButton';
 import { KILIM_MOTIFS, getKilimMotif } from './components/KilimAvatar';
 import { setSoundMuted, playTone, playDilbazNotificationSound } from './utils/soundEffects';
+import { getPhoenixState } from './utils/phoenixProgression';
 import {
   registerServiceWorker,
   sendMobilePushNotification,
@@ -83,6 +85,8 @@ export default function App() {
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isSanctuaryOpen, setIsSanctuaryOpen] = useState(false);
+  const [phoenixVersion, setPhoenixVersion] = useState(0);
   const [editingTekerleme, setEditingTekerleme] = useState<Tekerleme | null>(null);
   const [roomError, setRoomError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -1123,6 +1127,11 @@ export default function App() {
     room?.players.find((p) => p.id === currentUser.id)?.currentRoundScore ||
     null;
 
+  const phoenixState = useMemo(
+    () => getPhoenixState(userProfile),
+    [userProfile, phoenixVersion]
+  );
+
   return (
     <div className="relative min-h-screen text-[#F8FAFC] flex flex-col">
       <EbruBackground />
@@ -1334,6 +1343,7 @@ export default function App() {
                   isLoading={isLoading}
                   authUser={authUser}
                   userProfile={userProfile}
+                  phoenixState={phoenixState}
                   friends={acceptedFriendsSummary}
                   incomingInvites={pendingRoomInvites}
                   sentInvites={sentInvites}
@@ -1341,6 +1351,7 @@ export default function App() {
                   invitedRoomsInfo={invitedRoomsInfo}
                   pendingFriendsCount={pendingFriendsBadgeCount}
                   onOpenAuth={() => setIsAuthModalOpen(true)}
+                  onOpenSanctuary={() => setIsSanctuaryOpen(true)}
                   onNavigateTab={setActiveTab}
                   onAcceptInvite={handleAcceptRoomInvite}
                   onDismissInvite={handleDismissRoomInvite}
@@ -1365,6 +1376,7 @@ export default function App() {
                   isHost={room.hostId === currentUser.id}
                   onFinishRound={handleFinishRound}
                   onLeaveRoom={handleLeaveRoom}
+                  onPhoenixProgressUpdated={() => setPhoenixVersion((v) => v + 1)}
                 />
               )}
 
@@ -1425,6 +1437,7 @@ export default function App() {
             <SoloPractice
               tekerlemeler={tekerlemeler}
               initialTekerlemeId={selectedPracticeTekerlemeId}
+              onPhoenixProgressUpdated={() => setPhoenixVersion((v) => v + 1)}
             />
           )}
 
@@ -1617,6 +1630,15 @@ export default function App() {
         }}
         onSave={handleSaveTekerleme}
       />
+      {/* Zümrüdüanka Yuvası (Seviye & Envanter) Modal */}
+      <PhoenixSanctuaryModal
+        isOpen={isSanctuaryOpen}
+        phoenix={phoenixState}
+        userProfile={userProfile}
+        onProgressUpdated={() => setPhoenixVersion((v) => v + 1)}
+        onClose={() => setIsSanctuaryOpen(false)}
+      />
+
       {/* Offline Connectivity Indicator */}
       <OfflineIndicator />
     </div>

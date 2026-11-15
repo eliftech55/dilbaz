@@ -3,6 +3,8 @@ import { User } from 'firebase/auth';
 import { Room, Difficulty, PhonemeCategory, UserProfile, RoomInvite, RoomProgressionMode, RoomJoinMethod } from '../types/game';
 import { MascotDialogue } from './DilbazMascot';
 import { KILIM_MOTIFS, KilimAvatar, getKilimMotif } from './KilimAvatar';
+import { PhoenixHeroHub } from './PhoenixHeroHub';
+import { PhoenixComputedState } from '../utils/phoenixProgression';
 import { AppTab } from './Navbar';
 import { playTone } from '../utils/soundEffects';
 import {
@@ -21,9 +23,6 @@ import {
   Link as LinkIcon,
   Sparkles,
   Mic,
-  BookOpen,
-  Trophy,
-  LogIn,
   Swords,
   Send,
   X,
@@ -41,6 +40,7 @@ interface RoomLobbyProps {
   isLoading?: boolean;
   authUser?: User | null;
   userProfile?: UserProfile | null;
+  phoenixState?: PhoenixComputedState;
   friends?: { uid: string; name: string; avatar: string }[];
   incomingInvites?: RoomInvite[];
   sentInvites?: RoomInvite[];
@@ -48,6 +48,7 @@ interface RoomLobbyProps {
   invitedRoomsInfo?: Record<string, InvitedRoomStatusInfo>;
   pendingFriendsCount?: number;
   onOpenAuth?: () => void;
+  onOpenSanctuary?: () => void;
   onNavigateTab?: (tab: AppTab) => void;
   onAcceptInvite?: (invite: RoomInvite) => void;
   onDismissInvite?: (invite: RoomInvite) => void;
@@ -82,6 +83,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
   isLoading = false,
   authUser = null,
   userProfile = null,
+  phoenixState,
   friends = [],
   incomingInvites = [],
   sentInvites = [],
@@ -89,6 +91,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
   invitedRoomsInfo = {},
   pendingFriendsCount = 0,
   onOpenAuth,
+  onOpenSanctuary,
   onNavigateTab,
   onAcceptInvite,
   onDismissInvite,
@@ -202,20 +205,12 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
           })}
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-[#0d1629]/85 border border-[#FFBE0B]/35 flex items-start gap-3">
-          <KilimAvatar avatar={activeMotif.id} size={52} />
-          <div className="space-y-1 flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-display text-sm font-bold text-[#FFBE0B]">
-                {activeMotif.name}
-              </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#3A86FF]/20 text-[#93C5FD] border border-[#3A86FF]/35 font-semibold">
-                {activeMotif.meaningTag}
-              </span>
+        <div className="px-3.5 py-2.5 rounded-2xl bg-[#0d1629]/85 border border-[#FFBE0B]/30 flex items-center gap-3">
+          <KilimAvatar avatar={activeMotif.id} size={38} />
+          <div className="flex-1 min-w-0">
+            <div className="font-display text-xs font-bold text-[#FFBE0B] truncate">
+              {activeMotif.name} · <span className="text-[#93C5FD] font-semibold">{activeMotif.meaningTag}</span>
             </div>
-            <p className="text-[11.5px] text-[#CBD5E1] leading-relaxed">
-              {activeMotif.description}
-            </p>
           </div>
         </div>
       </div>
@@ -275,16 +270,17 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
   // NOT IN A ROOM YET (OPENING SCREEN)
   if (!room) {
     return (
-      <div className="max-w-2xl mx-auto space-y-5 animate-screen-in">
-        {/* Clean Brand Title */}
-        <div className="text-center space-y-1.5 pt-1">
-          <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-wider bg-gradient-to-br from-white via-[#FFBE0B] to-[#FF006E] bg-clip-text text-transparent drop-shadow-[0_4px_14px_rgba(255,0,110,0.3)]">
-            DİLBAZ
-          </h1>
-          <p className="text-xs sm:text-sm text-[#93C5FD] font-medium max-w-md mx-auto">
-            Telaffuz ve Diksiyon Oyunları
-          </p>
-        </div>
+      <div className="max-w-2xl mx-auto space-y-4 animate-screen-in">
+        {/* Zümrüdüanka Hero Centerpiece */}
+        {viewMode === 'options' && phoenixState && (
+          <PhoenixHeroHub
+            phoenix={phoenixState}
+            authUser={authUser}
+            userProfile={userProfile}
+            onOpenSanctuary={() => onOpenSanctuary?.()}
+            onOpenAuth={onOpenAuth}
+          />
+        )}
 
         {/* Incoming Friend Room Invites */}
         {viewMode === 'options' && incomingInvites.length > 0 && (
@@ -377,141 +373,19 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
           </div>
         )}
 
-        {/* Opening Hub Cards: Yarışma Odaları, Bireysel Pratik, Tekerleme Havuzu, Arkadaşlar, Liderlik Panosu */}
-        {viewMode === 'options' && onNavigateTab && (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-            <div className="p-3 rounded-2xl bg-gradient-to-br from-[#3A86FF]/28 to-[#14213D] border-2 border-[#3A86FF]/70 text-left shadow-lg">
-              <Users className="w-5 h-5 text-[#00F5D4] mb-1.5" />
-              <div className="font-display text-xs font-bold text-white">Yarışma Odaları</div>
-              <div className="text-[10px] text-[#93C5FD] mt-0.5">
-                1. lik: Kişi × {POINTS_PER_PLAYER_MULTIPLAYER_WIN}p
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                playTone('tap');
-                onNavigateTab('solo');
-              }}
-              className="p-3 rounded-2xl bg-[#14213D]/85 hover:bg-[#FF006E]/20 border border-white/15 hover:border-[#FF006E]/55 text-left transition-all cursor-pointer group"
-            >
-              <Mic className="w-5 h-5 text-[#FF006E] mb-1.5 group-hover:scale-110 transition-transform" />
-              <div className="font-display text-xs font-bold text-white">Bireysel Pratik</div>
-              <div className="text-[10px] text-[#CBD5E1] mt-0.5">Serbest diksiyon çalış</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                playTone('tap');
-                onNavigateTab('library');
-              }}
-              className="p-3 rounded-2xl bg-[#14213D]/85 hover:bg-[#06D6A0]/20 border border-white/15 hover:border-[#06D6A0]/55 text-left transition-all cursor-pointer group"
-            >
-              <BookOpen className="w-5 h-5 text-[#06D6A0] mb-1.5 group-hover:scale-110 transition-transform" />
-              <div className="font-display text-xs font-bold text-white">Tekerleme Havuzu</div>
-              <div className="text-[10px] text-[#CBD5E1] mt-0.5">
-                {authUser ? 'Önerilerim (+100 puan)' : 'Üyelere özel alan'}
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                playTone('tap');
-                onNavigateTab('friends');
-              }}
-              className="relative p-3 rounded-2xl bg-[#14213D]/85 hover:bg-[#8B5CF6]/20 border border-white/15 hover:border-[#EC4899]/55 text-left transition-all cursor-pointer group"
-            >
-              <UserPlus className="w-5 h-5 text-[#EC4899] mb-1.5 group-hover:scale-110 transition-transform" />
-              <div className="font-display text-xs font-bold text-white flex items-center gap-1">
-                <span>Arkadaşlar</span>
-                {pendingFriendsCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-[#FF006E] text-white text-[9px] font-bold">
-                    {pendingFriendsCount}
-                  </span>
-                )}
-              </div>
-              <div className="text-[10px] text-[#CBD5E1] mt-0.5">E-posta ekle & davet et</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                playTone('tap');
-                onNavigateTab('leaderboard');
-              }}
-              className="col-span-2 sm:col-span-1 p-3 rounded-2xl bg-[#14213D]/85 hover:bg-[#FFBE0B]/20 border border-white/15 hover:border-[#FFBE0B]/55 text-left transition-all cursor-pointer group"
-            >
-              <Trophy className="w-5 h-5 text-[#FFBE0B] mb-1.5 group-hover:scale-110 transition-transform" />
-              <div className="font-display text-xs font-bold text-white">Liderlik Panosu</div>
-              <div className="text-[10px] text-[#CBD5E1] mt-0.5">İlk 10 sıralama</div>
-            </button>
-          </div>
-        )}
-
-        {/* Sign-In / Account Banner */}
-        {viewMode === 'options' && onOpenAuth && (
-          <div className="p-3.5 rounded-2xl bg-[#0d1629]/85 border border-white/12 flex flex-wrap items-center justify-between gap-3">
-            {authUser && userProfile ? (
-              <>
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <KilimAvatar avatar={userProfile.avatar} size={36} />
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-white truncate">
-                      Hoş geldin, {userProfile.username}
-                    </div>
-                    <div className="text-[11px] text-[#93C5FD]">
-                      Liderlik Puanı: <strong className="text-[#FFBE0B]">{userProfile.points}</strong> · Oda 1. liği: Oyuncu × {POINTS_PER_PLAYER_MULTIPLAYER_WIN}p
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    playTone('tap');
-                    onOpenAuth();
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-white cursor-pointer"
-                >
-                  Profil & Şifre
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="text-xs text-[#CBD5E1] flex-1 min-w-[180px]">
-                  <strong className="text-white">Kayıtsız da oda kurup yarışabilirsiniz</strong> (puanlar veritabanına kaydedilmez). Puan biriktirmek ve Telaffuz Ustaları Sıralamasına girmek için giriş yapın.
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    playTone('tap');
-                    onOpenAuth();
-                  }}
-                  className="px-3.5 py-2 rounded-xl btn-epic-turquoise text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
-                >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>Giriş Yap / Kayıt Ol</span>
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
         {error && (
           <div className="p-3.5 bg-[#FF006E]/20 border border-[#FF006E]/55 rounded-2xl text-rose-200 text-xs text-center font-semibold">
             {error}
           </div>
         )}
 
-        {/* Quick Rejoin Banner for Active Rooms (when user or host left mid-game) */}
+        {/* Quick Rejoin Banner for Active Rooms */}
         {viewMode === 'options' && rejoinableRooms.length > 0 && (
-          <div className="p-4 rounded-[24px] bg-gradient-to-r from-[#06D6A0]/18 via-[#3A86FF]/20 to-[#FFBE0B]/15 border-2 border-[#00F5D4]/60 space-y-2.5 shadow-lg">
+          <div className="p-3.5 rounded-[24px] bg-gradient-to-r from-[#06D6A0]/18 via-[#3A86FF]/18 to-[#FFBE0B]/15 border border-[#00F5D4]/55 space-y-2 shadow-lg">
             <div className="flex items-center justify-between gap-2">
               <div className="text-xs font-display font-bold text-[#00F5D4] flex items-center gap-1.5">
                 <RotateCcw className="w-4 h-4" />
-                <span>Devam Eden Aktif Odaların ({rejoinableRooms.length})</span>
+                <span>Aktif Odaların ({rejoinableRooms.length})</span>
               </div>
               <button
                 type="button"
@@ -521,55 +395,30 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                 }}
                 className="text-[11px] font-bold text-[#FFBE0B] hover:underline cursor-pointer"
               >
-                Tümünü Gör &rarr;
+                Tümü &rarr;
               </button>
             </div>
             {rejoinableRooms.slice(0, 2).map((r) => {
               const isMyCreatedRoom = (r.originalHostId || r.hostId) === currentUser.id;
-              const isParticipantRoom =
-                !isMyCreatedRoom &&
-                Array.isArray(r.participantIds) &&
-                r.participantIds.includes(currentUser.id);
               const statusLabel =
                 r.status === 'waiting'
-                  ? 'Lobide Bekliyor'
+                  ? 'Bekliyor'
                   : r.status === 'round_result'
-                  ? `Tur ${r.currentRound}/${r.totalRounds} Sonuçları`
-                  : `Tur ${r.currentRound}/${r.totalRounds} Devam Ediyor`;
+                  ? `Tur ${r.currentRound}/${r.totalRounds}`
+                  : `Tur ${r.currentRound}/${r.totalRounds} Aktif`;
 
               return (
                 <div
                   key={r.code}
-                  className="p-3 rounded-2xl bg-[#0d1629]/85 border border-white/12 flex flex-wrap items-center justify-between gap-2.5"
+                  className="p-2.5 rounded-2xl bg-[#0d1629]/85 border border-white/12 flex items-center justify-between gap-2.5"
                 >
-                  <div className="min-w-0 space-y-0.5">
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
-                      <span className="truncate">{r.title}</span>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
                       <span className="font-mono text-[#FFBE0B]">{r.code}</span>
-                      {isMyCreatedRoom ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FFBE0B]/20 text-[#FFBE0B] font-bold">
-                          Kurucu
-                        </span>
-                      ) : isParticipantRoom ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#3A86FF]/20 text-[#93C5FD] font-bold">
-                          Katılımcı
-                        </span>
-                      ) : (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#06D6A0]/20 text-[#06D6A0] font-bold">
-                          Davet Edildin
-                        </span>
-                      )}
+                      <span className="truncate">{r.title}</span>
                     </div>
-                    <div className="text-[11px] text-[#93C5FD] flex flex-wrap items-center gap-2">
-                      <span>{statusLabel}</span>
-                      <span>·</span>
-                      <span>{r.players.length} Oyuncu</span>
-                      <span>·</span>
-                      <span>
-                        {r.settings?.progressionMode === 'auto' || r.hostLeftAutoMode
-                          ? 'Otomatik İlerleme'
-                          : 'Kurucu Yönetiminde'}
-                      </span>
+                    <div className="text-[11px] text-[#93C5FD] tabular-nums">
+                      {statusLabel} · {r.players.length} Oyuncu · {isMyCreatedRoom ? 'Kurucu' : 'Katılımcı'}
                     </div>
                   </div>
                   <button
@@ -584,10 +433,10 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                         'active_list'
                       );
                     }}
-                    className="px-4 py-2 rounded-xl btn-epic-turquoise text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-50"
+                    className="min-h-[38px] px-3.5 py-1.5 rounded-xl btn-epic-turquoise text-xs font-bold flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-50"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>{r.status === 'waiting' ? 'Odaya Katıl' : 'Oyuna Devam Et'}</span>
+                    <span>Gir</span>
                   </button>
                 </div>
               );
@@ -595,54 +444,52 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
           </div>
         )}
 
-        {/* Room Options Card */}
+        {/* Visual 3D Game Action Grid */}
         {viewMode === 'options' && (
-          <section className="ebru-glass-card rounded-[26px] p-4 sm:p-5 space-y-3">
-            <div className="space-y-3">
+          <section className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
               <button
+                type="button"
                 onClick={() => {
                   playTone('tap');
                   setViewMode('create');
                 }}
-                className="w-full flex items-center gap-3.5 p-4 rounded-[20px] bg-gradient-to-r from-[#3A86FF]/22 to-[#FF006E]/15 border border-[#3A86FF]/55 hover:-translate-y-0.5 transition-all text-left shadow-lg shadow-[#3A86FF]/15 cursor-pointer group"
+                className="min-h-[96px] p-4 rounded-[24px] bg-gradient-to-br from-[#3A86FF]/30 via-[#1d315c] to-[#14213D] border border-[#3A86FF]/55 flex flex-col justify-between text-left game-tile-3d cursor-pointer group"
               >
-                <div className="w-11 h-11 rounded-[14px] bg-gradient-to-br from-[#FFBE0B] to-[#FF006E] text-white flex items-center justify-center font-display font-bold text-xl shrink-0 shadow-md shadow-[#FF006E]/40 group-hover:scale-105 transition-transform">
-                  👑
-                </div>
-                <div className="flex-1">
-                  <div className="font-display text-base font-bold text-white">
-                    Oda Kur (Öğretmen / Kurucu)
+                <div className="flex items-center justify-between w-full">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#FFBE0B] to-[#FF006E] text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+                    <Crown className="w-5 h-5" />
                   </div>
-                  <div className="text-xs text-[#CBD5E1] mt-0.5">
-                    PIN kodunu oluşturun, kurucu yönetiminde veya otomatik ilerleme ile yarışın.
-                  </div>
+                  <span className="text-[11px] font-mono font-bold text-[#FFBE0B]">+ODA</span>
                 </div>
-                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#06D6A0]/20 text-[#06D6A0] border border-[#06D6A0]/40 shrink-0">
-                  KURUCU
-                </span>
+                <div className="pt-2">
+                  <div className="font-display text-sm sm:text-base font-bold text-white leading-tight">
+                    Oda Kur
+                  </div>
+                  <div className="text-[11px] text-[#93C5FD] mt-0.5">Canlı PIN al</div>
+                </div>
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   playTone('tap');
                   setViewMode('join');
                 }}
-                className="w-full flex items-center gap-3.5 p-4 rounded-[20px] bg-gradient-to-r from-[#00F5D4]/15 to-[#3A86FF]/20 border border-[#00F5D4]/45 hover:-translate-y-0.5 transition-all text-left shadow-lg shadow-[#00F5D4]/10 cursor-pointer group"
+                className="min-h-[96px] p-4 rounded-[24px] bg-gradient-to-br from-[#00F5D4]/22 via-[#193059] to-[#14213D] border border-[#00F5D4]/45 flex flex-col justify-between text-left game-tile-3d cursor-pointer group"
               >
-                <div className="w-11 h-11 rounded-[14px] bg-gradient-to-br from-[#00F5D4] to-[#3A86FF] text-[#0d1629] flex items-center justify-center font-display font-bold text-xl shrink-0 shadow-md shadow-[#3A86FF]/40 group-hover:scale-105 transition-transform">
-                  🚀
-                </div>
-                <div className="flex-1">
-                  <div className="font-display text-base font-bold text-white">
-                    Odaya Katıl (Öğrenci / Yarışmacı)
+                <div className="flex items-center justify-between w-full">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#00F5D4] to-[#3A86FF] text-[#0d1629] flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+                    <Swords className="w-5 h-5" />
                   </div>
-                  <div className="text-xs text-[#CBD5E1] mt-0.5">
-                    PIN kodunu biliyorsan beklemedeki veya devam eden aktif odaya katıl.
-                  </div>
+                  <span className="text-[11px] font-mono font-bold text-[#00F5D4]">PIN</span>
                 </div>
-                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#3A86FF]/25 text-[#93C5FD] border border-[#3A86FF]/45 shrink-0">
-                  KATIL
-                </span>
+                <div className="pt-2">
+                  <div className="font-display text-sm sm:text-base font-bold text-white leading-tight">
+                    Odaya Katıl
+                  </div>
+                  <div className="text-[11px] text-[#93C5FD] mt-0.5">Kodla bağlan</div>
+                </div>
               </button>
 
               <button
@@ -651,34 +498,73 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                   playTone('tap');
                   setViewMode('active_rooms');
                 }}
-                className="w-full flex items-center gap-3.5 p-4 rounded-[20px] bg-gradient-to-r from-[#06D6A0]/15 to-[#FFBE0B]/15 border border-[#06D6A0]/45 hover:-translate-y-0.5 transition-all text-left shadow-lg shadow-[#06D6A0]/10 cursor-pointer group"
+                className="min-h-[92px] p-4 rounded-[24px] bg-gradient-to-br from-[#06D6A0]/20 via-[#16294b] to-[#14213D] border border-[#06D6A0]/40 flex flex-col justify-between text-left game-tile-3d cursor-pointer group"
               >
-                <div className="w-11 h-11 rounded-[14px] bg-gradient-to-br from-[#06D6A0] to-[#FFBE0B] text-[#0d1629] flex items-center justify-center font-display font-bold text-xl shrink-0 shadow-md shadow-[#06D6A0]/30 group-hover:scale-105 transition-transform">
-                  <RotateCcw className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
-                  <div className="font-display text-base font-bold text-white">
-                    Aktif Odalar (Oyuna Devam Et)
+                <div className="flex items-center justify-between w-full">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#06D6A0] to-[#FFBE0B] text-[#0d1629] flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+                    <RotateCcw className="w-5 h-5" />
                   </div>
-                  <div className="text-xs text-[#CBD5E1] mt-0.5">
-                    Yalnızca kurduğun, davet edildiğin veya katıldığın aktif odalar listelenir; diğerleri için PIN gir.
-                  </div>
+                  <span className="text-[11px] font-mono font-bold text-[#06D6A0] tabular-nums">
+                    {rejoinableRooms.length > 0 ? `${rejoinableRooms.length} AÇIK` : 'ODALAR'}
+                  </span>
                 </div>
-                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#FFBE0B]/20 text-[#FFBE0B] border border-[#FFBE0B]/45 shrink-0">
-                  {rejoinableRooms.length > 0 ? `${rejoinableRooms.length} AKTİF` : 'LİSTE'}
-                </span>
+                <div className="pt-2">
+                  <div className="font-display text-sm sm:text-base font-bold text-white leading-tight">
+                    Aktif Odalar
+                  </div>
+                  <div className="text-[11px] text-[#93C5FD] mt-0.5">Kaldığın yerden</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  playTone('tap');
+                  onNavigateTab?.('solo');
+                }}
+                className="min-h-[92px] p-4 rounded-[24px] bg-gradient-to-br from-[#FF006E]/22 via-[#21254d] to-[#14213D] border border-[#FF006E]/45 flex flex-col justify-between text-left game-tile-3d cursor-pointer group"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#FF006E] to-[#FF5400] text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+                    <Mic className="w-5 h-5" />
+                  </div>
+                  <span className="text-[11px] font-mono font-bold text-[#FFBE0B]">+XP</span>
+                </div>
+                <div className="pt-2">
+                  <div className="font-display text-sm sm:text-base font-bold text-white leading-tight">
+                    Bireysel Pratik
+                  </div>
+                  <div className="text-[11px] text-[#93C5FD] mt-0.5">Kıvılcım kazan</div>
+                </div>
               </button>
             </div>
+
+            {pendingFriendsCount > 0 && onNavigateTab && (
+              <button
+                type="button"
+                onClick={() => {
+                  playTone('tap');
+                  onNavigateTab('friends');
+                }}
+                className="w-full min-h-[46px] px-4 py-2.5 rounded-2xl bg-[#EC4899]/18 hover:bg-[#EC4899]/28 border border-[#EC4899]/45 flex items-center justify-between text-xs font-bold text-white cursor-pointer"
+              >
+                <span className="flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-[#EC4899]" />
+                  <span>Arkadaşlar & Bekleyen Davetler</span>
+                </span>
+                <span className="font-mono text-[#FFBE0B] tabular-nums">{pendingFriendsCount} Yeni</span>
+              </button>
+            )}
 
             <button
               onClick={() => {
                 playTone('tap');
                 setViewMode('create');
               }}
-              className="w-full mt-2 py-4 px-5 rounded-[22px] btn-epic-pomegranate font-bold text-base tracking-wide flex items-center justify-center gap-2.5 cursor-pointer"
+              className="w-full py-4 px-5 rounded-[22px] btn-epic-pomegranate font-bold text-base tracking-wide flex items-center justify-center gap-2.5 cursor-pointer"
             >
               <Play className="w-5 h-5 fill-current" />
-              <span>OYUNA BAŞLA · ODA KUR</span>
+              <span>HIZLI ODA KUR</span>
             </button>
           </section>
         )}
@@ -842,8 +728,8 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
               </button>
             </div>
 
-            <div className="p-3 rounded-2xl bg-[#3A86FF]/12 border border-[#3A86FF]/35 text-[11.5px] text-[#CBD5E1] leading-relaxed">
-              Güvenlik ve gizlilik için yalnızca <strong className="text-white">kurduğun</strong>, <strong className="text-white">davet edildiğin</strong> veya <strong className="text-white">daha önce katıldığın</strong> aktif odalar görünür. Başka bir aktif odaya sonradan katılmak için oda PIN kodunu girin.
+            <div className="px-3.5 py-2.5 rounded-2xl bg-[#3A86FF]/12 border border-[#3A86FF]/35 text-[11px] text-[#93C5FD]">
+              Kurduğun, davet edildiğin veya katıldığın odalar · Diğerleri için PIN gir
             </div>
 
             {rejoinableRooms.length === 0 ? (

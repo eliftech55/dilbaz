@@ -6,6 +6,7 @@ import { AudioVisualizer } from './AudioVisualizer';
 import { WordComparison } from './WordComparison';
 import { MascotDialogue } from './DilbazMascot';
 import { playTone, playComboWordTone } from '../utils/soundEffects';
+import { recordPracticeOrRoundReward } from '../utils/phoenixProgression';
 import { Square, Volume2, Timer, Zap, Mic, LogOut } from 'lucide-react';
 
 interface WordBurstEffect {
@@ -35,6 +36,7 @@ interface GameArenaProps {
   isHost?: boolean;
   onFinishRound: (result: PlayerScore) => void;
   onLeaveRoom?: () => void;
+  onPhoenixProgressUpdated?: () => void;
 }
 
 export const GameArena: React.FC<GameArenaProps> = ({
@@ -45,7 +47,8 @@ export const GameArena: React.FC<GameArenaProps> = ({
   currentUser,
   isHost = false,
   onFinishRound,
-  onLeaveRoom
+  onLeaveRoom,
+  onPhoenixProgressUpdated
 }) => {
   const [phase, setPhase] = useState<'countdown' | 'playing' | 'evaluating'>('countdown');
   const [countdownNum, setCountdownNum] = useState(3);
@@ -245,6 +248,14 @@ export const GameArena: React.FC<GameArenaProps> = ({
       candidateTranscript,
       duration
     );
+
+    recordPracticeOrRoundReward({
+      source: 'multiplayer',
+      accuracy: evalResult.accuracy,
+      wpm: evalResult.wpm,
+      score: evalResult.totalScore
+    });
+    onPhoenixProgressUpdated?.();
 
     playTone(
       evalResult.accuracy >= 75

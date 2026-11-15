@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Room } from '../types/game';
 import { DilbazMascot } from './DilbazMascot';
 import { KilimAvatar } from './KilimAvatar';
+import { ComprehensiveStatsPanel } from './ComprehensiveStatsPanel';
 import { triggerCelebration } from './FxCanvas';
 import { claimMultiplayerWinReward, POINTS_PER_PLAYER_MULTIPLAYER_WIN } from '../firebase/authService';
 import { playTone } from '../utils/soundEffects';
@@ -87,7 +88,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
     room.players.length >= 2 && winner?.id === currentUserId && !authUid;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5 animate-screen-in">
+    <div className="max-w-3xl mx-auto space-y-5 animate-screen-in">
       {/* Victory Hero */}
       <div className="ebru-glass-card border-[1.5px] border-[#FFBE0B]/45 rounded-[28px] p-6 text-center space-y-2">
         <div className="flex justify-center mb-1">
@@ -230,6 +231,9 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
           })}
         </div>
       </div>
+
+      {/* Comprehensive Performance Statistics & Bar Chart Panel */}
+      <ComprehensiveStatsPanel room={room} currentUserId={currentUserId} />
 
       {/* Actions */}
       <div className="flex flex-col sm:flex-row gap-3">

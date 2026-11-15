@@ -8,16 +8,19 @@ import { WordComparison } from './WordComparison';
 import { MascotDialogue } from './DilbazMascot';
 import { triggerCelebration } from './FxCanvas';
 import { playTone, playComboWordTone } from '../utils/soundEffects';
-import { Mic, Square, Volume2, Shuffle } from 'lucide-react';
+import { recordPracticeOrRoundReward } from '../utils/phoenixProgression';
+import { Mic, Square, Volume2, Shuffle, Sparkles } from 'lucide-react';
 
 interface SoloPracticeProps {
   tekerlemeler: Tekerleme[];
   initialTekerlemeId?: string;
+  onPhoenixProgressUpdated?: () => void;
 }
 
 export const SoloPractice: React.FC<SoloPracticeProps> = ({
   tekerlemeler,
-  initialTekerlemeId
+  initialTekerlemeId,
+  onPhoenixProgressUpdated
 }) => {
   const [selectedTekerleme, setSelectedTekerleme] = useState<Tekerleme>(() => {
     if (initialTekerlemeId) {
@@ -31,6 +34,7 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
   const [audioLevel, setAudioLevel] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
+  const [practiceReward, setPracticeReward] = useState<{ xpEarned: number; sparksEarned: number } | null>(null);
   const [elapsed, setElapsed] = useState<number>(0);
 
   const speechEngineRef = useRef<SpeechEngine | null>(null);
@@ -132,6 +136,15 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
     const result = evaluateSpeech(selectedTekerleme, textToEvaluate, duration);
     setEvaluation(result);
 
+    const reward = recordPracticeOrRoundReward({
+      source: 'solo',
+      accuracy: result.accuracy,
+      wpm: result.wpm,
+      score: result.totalScore
+    });
+    setPracticeReward({ xpEarned: reward.xpEarned, sparksEarned: reward.sparksEarned });
+    onPhoenixProgressUpdated?.();
+
     if (result.accuracy >= 75) {
       playTone('victory');
       triggerCelebration({ xRatio: 0.5, yRatio: 0.35, count: 36 });
@@ -183,18 +196,20 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
   }, [wordsForDisplay, liveAccuracy, isListening]);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5 animate-screen-in">
-      {/* Header */}
-      <div className="text-center space-y-1.5">
-        <span className="inline-block text-[11px] font-display font-bold uppercase tracking-wider text-[#00F5D4] px-3 py-1 rounded-full bg-[#3A86FF]/20 border border-[#3A86FF]/40">
-          ✦ Bireysel Çalışma Alanı
-        </span>
-        <h1 className="text-2xl sm:text-3xl font-bold text-white font-display">
-          Bireysel Diksiyon & Hız Pratiği
-        </h1>
-        <p className="text-xs text-[#CBD5E1] max-w-md mx-auto">
-          Oda yarışları öncesi tekerlemeleri çalışın, telaffuz doğruluğunuzu ve hızınızı geliştirin.
-        </p>
+    <div className="max-w-2xl mx-auto space-y-4 animate-screen-in">
+      {/* Compact Visual Header */}
+      <div className="flex items-center justify-between gap-3 px-1">
+        <div>
+          <div className="text-[11px] font-display font-bold uppercase tracking-wider text-[#00F5D4]">
+            Zümrüdüanka Antrenmanı
+          </div>
+          <h1 className="text-xl sm:text-2xl font-bold text-white font-display">
+            Bireysel Pratik
+          </h1>
+        </div>
+        <div className="text-right text-[11px] text-[#FFBE0B] font-semibold">
+          Her pratikte +XP & Kıvılcım
+        </div>
       </div>
 
       {/* Tekerleme Selector Strip */}
@@ -293,19 +308,27 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
 
       {/* Practice Results Card */}
       {evaluation && (
-        <div className="p-5 sm:p-6 ebru-glass-card border-[1.5px] border-[#00F5D4]/45 rounded-[28px] space-y-4 animate-screen-in">
+        <div className="p-5 sm:p-6 game-card-3d border-[1.5px] border-[#00F5D4]/45 rounded-[28px] space-y-4 animate-screen-in">
           <div className="flex items-center justify-between pb-3 border-b border-white/10">
             <div>
               <span className="text-[11px] font-display uppercase tracking-wider text-[#00F5D4]">
-                ✦ Pratik Karnesi
+                Pratik Karnesi
               </span>
               <h2 className="text-lg font-bold text-white font-display">
-                {evaluation.badge || 'Tebrikler! Pratik Tamamlandı'}
+                {evaluation.badge || 'Pratik Tamamlandı'}
               </h2>
             </div>
-            <span className="text-[11px] px-2.5 py-1 rounded-full bg-white/10 text-[#93C5FD] border border-white/15 font-semibold">
-              Performans: {evaluation.totalScore}
-            </span>
+            <div className="text-right">
+              <div className="text-sm font-display font-bold text-[#FFBE0B] tabular-nums">
+                {evaluation.totalScore} Puan
+              </div>
+              {practiceReward && (
+                <div className="text-[11px] font-bold text-[#06D6A0] flex items-center justify-end gap-1 tabular-nums">
+                  <Sparkles className="w-3 h-3" />
+                  <span>+{practiceReward.xpEarned} XP · +{practiceReward.sparksEarned} Kıvılcım</span>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-3 text-center">
