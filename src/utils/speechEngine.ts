@@ -23,6 +23,22 @@ function isMobileBrowser(): boolean {
 }
 
 /**
+ * Flattens a segment into raw-token-mapped normalized units so overlap deduplication works
+ * even when mobile ASR outputs numbers ("40"), punctuation, or slight diacritic variations.
+ */
+function buildNormUnits(text: string): { norm: string; tokenIdx: number }[] {
+  const rawTokens = text.trim().split(/\s+/).filter(Boolean);
+  const units: { norm: string; tokenIdx: number }[] = [];
+  for (let t = 0; t < rawTokens.length; t++) {
+    const expanded = splitWords(rawTokens[t]);
+    for (const norm of expanded) {
+      units.push({ norm, tokenIdx: t });
+    }
+  }
+  return units;
+}
+
+/**
  * Merges two speech segments while stripping overlapping suffix/prefix words
  * (prevents Android Chrome continuous=true from duplicating trailing words across restarts/results).
  */
@@ -34,23 +50,48 @@ function mergeSegmentsWithoutOverlap(prev: string, next: string): string {
 
   const prevTokens = cleanPrev.split(/\s+/);
   const nextTokens = cleanNext.split(/\s+/);
-  const prevNorms = splitWords(cleanPrev);
-  const nextNorms = splitWords(cleanNext);
+  const prevUnits = buildNormUnits(cleanPrev);
+  const nextUnits = buildNormUnits(cleanNext);
 
-  if (prevNorms.length > 0 && nextNorms.length > 0 && prevNorms.length === prevTokens.length && nextNorms.length === nextTokens.length) {
-    // Check if next is entirely contained at the end of prev
-    const maxOverlap = Math.min(prevNorms.length, nextNorms.length, 10);
+  if (prevUnits.length > 0 && nextUnits.length > 0) {
+    // 1) Check if next's prefix overlaps prev's suffix (with phonetic tolerance for ASR interim->final revisions)
+    const maxOverlap = Math.min(prevUnits.length, nextUnits.length, 14);
     for (let k = maxOverlap; k >= 1; k--) {
       let matched = true;
       for (let i = 0; i < k; i++) {
-        if (prevNorms[prevNorms.length - k + i] !== nextNorms[i]) {
+        const a = prevUnits[prevUnits.length - k + i].norm;
+        const b = nextUnits[i].norm;
+        if (a !== b && wordSimilarity(a, b) < 0.82) {
           matched = false;
           break;
         }
       }
       if (matched) {
-        const remainder = nextTokens.slice(k).join(' ');
+        if (k >= nextUnits.length) {
+          return cleanPrev;
+        }
+        const cutTokenIdx = nextUnits[k].tokenIdx;
+        const remainder = nextTokens.slice(cutTokenIdx).join(' ');
         return remainder ? `${cleanPrev} ${remainder}` : cleanPrev;
+      }
+    }
+
+    // 2) Check if entire next is a short repeated echo inside the last 6 units of prev (Android Chrome quirk)
+    if (nextUnits.length <= 4 && prevUnits.length >= nextUnits.length) {
+      const tailStart = Math.max(0, prevUnits.length - 6);
+      for (let start = tailStart; start <= prevUnits.length - nextUnits.length; start++) {
+        let allMatch = true;
+        for (let i = 0; i < nextUnits.length; i++) {
+          const a = prevUnits[start + i].norm;
+          const b = nextUnits[i].norm;
+          if (a !== b && wordSimilarity(a, b) < 0.85) {
+            allMatch = false;
+            break;
+          }
+        }
+        if (allMatch) {
+          return cleanPrev;
+        }
       }
     }
   }
@@ -111,6 +152,7 @@ export class SpeechEngine {
   private targetNormWords: string[] = [];
   private pulseInterval: any = null;
   private lastActivityAt: number = 0;
+  private firstAudioAt: number = 0;
   private pendingStopResolver: (() => void) | null = null;
   private isStoppingManually: boolean = false;
 
@@ -129,6 +171,7 @@ export class SpeechEngine {
     this.sessionInterim = '';
     this.latestTranscript = '';
     this.lastActivityAt = 0;
+    this.firstAudioAt = 0;
     this.pendingStopResolver = null;
     this.isStoppingManually = false;
     this.targetNormWords = callbacks.targetText ? splitWords(callbacks.targetText) : [];
@@ -137,7 +180,7 @@ export class SpeechEngine {
 
     if (!SpeechRec) {
       callbacks.onError?.(
-        'Tarayıcınız ses tanıma özelliğini desteklemiyor (Chrome, Edge veya Safari kullanın). Test için "Simüle Hızlı Oku" butonunu kullanabilirsiniz.'
+        'Tarayıcınız ses tanıma özelliğini desteklemiyor (Chrome, Edge veya Safari kullanın).'
       );
       return false;
     }
@@ -180,19 +223,27 @@ export class SpeechEngine {
     recognition.maxAlternatives = 5;
 
     recognition.onaudiostart = () => {
-      this.lastActivityAt = Date.now();
+      const now = Date.now();
+      this.lastActivityAt = now;
+      if (!this.firstAudioAt) this.firstAudioAt = now;
     };
 
     recognition.onsoundstart = () => {
-      this.lastActivityAt = Date.now();
+      const now = Date.now();
+      this.lastActivityAt = now;
+      if (!this.firstAudioAt) this.firstAudioAt = now;
     };
 
     recognition.onspeechstart = () => {
-      this.lastActivityAt = Date.now();
+      const now = Date.now();
+      this.lastActivityAt = now;
+      if (!this.firstAudioAt) this.firstAudioAt = now;
     };
 
     recognition.onresult = (event: any) => {
-      this.lastActivityAt = Date.now();
+      const now = Date.now();
+      this.lastActivityAt = now;
+      if (!this.firstAudioAt) this.firstAudioAt = now;
       let finalBuf = '';
       let interimBuf = '';
 
@@ -275,6 +326,18 @@ export class SpeechEngine {
 
   public getLatestTranscript(): string {
     return this.latestTranscript.trim();
+  }
+
+  /**
+   * Returns an effective start timestamp compensated for mobile microphone initialization lag
+   * (up to 1.8s) so mobile and desktop browsers evaluate reading speed fairly.
+   */
+  public getEffectiveStartTime(fallbackStartMs: number): number {
+    if (!this.firstAudioAt || this.firstAudioAt <= fallbackStartMs) {
+      return fallbackStartMs;
+    }
+    const lag = Math.min(1800, this.firstAudioAt - fallbackStartMs);
+    return fallbackStartMs + lag;
   }
 
   /**

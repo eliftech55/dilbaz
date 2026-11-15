@@ -13,9 +13,71 @@ import { db } from './config';
 import {
   EmailDirectoryEntry,
   Friendship,
-  RoomInvite
+  RoomInvite,
+  RoomStatus
 } from '../types/game';
 import { OperationType, handleFirestoreError } from './errorHandler';
+
+export interface InvitedRoomStatusInfo {
+  exists: boolean;
+  status?: RoomStatus;
+  playerIds?: string[];
+}
+
+export function formatInviteDateTime(timestamp?: number): string {
+  if (!timestamp) return '';
+  try {
+    return new Intl.DateTimeFormat('tr-TR', {
+      day: '2-digit',
+      month: 'long',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(timestamp));
+  } catch {
+    return new Date(timestamp).toLocaleString('tr-TR');
+  }
+}
+
+export async function fetchInvitedRoomStatus(roomCode: string): Promise<InvitedRoomStatusInfo> {
+  try {
+    const snap = await getDoc(doc(db, 'rooms', roomCode.trim().toUpperCase()));
+    if (!snap.exists()) return { exists: false };
+    const data = snap.data() as { status?: RoomStatus; players?: { id: string }[] };
+    return {
+      exists: true,
+      status: data.status,
+      playerIds: Array.isArray(data.players) ? data.players.map((p) => p.id) : []
+    };
+  } catch {
+    return { exists: true };
+  }
+}
+
+export function subscribeToRoomStatus(
+  roomCode: string,
+  onChange: (info: InvitedRoomStatusInfo) => void
+): () => void {
+  const normalized = roomCode.trim().toUpperCase();
+  return onSnapshot(
+    doc(db, 'rooms', normalized),
+    (snap) => {
+      if (!snap.exists()) {
+        onChange({ exists: false });
+        return;
+      }
+      const data = snap.data() as { status?: RoomStatus; players?: { id: string }[] };
+      onChange({
+        exists: true,
+        status: data.status,
+        playerIds: Array.isArray(data.players) ? data.players.map((p) => p.id) : []
+      });
+    },
+    () => {
+      // ignore transient listener errors
+    }
+  );
+}
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();

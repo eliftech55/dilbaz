@@ -6,6 +6,11 @@ import { KILIM_MOTIFS, KilimAvatar, getKilimMotif } from './KilimAvatar';
 import { AppTab } from './Navbar';
 import { playTone } from '../utils/soundEffects';
 import {
+  InvitedRoomStatusInfo,
+  formatInviteDateTime
+} from '../firebase/friendsFirestore';
+import { POINTS_PER_PLAYER_MULTIPLAYER_WIN } from '../firebase/authService';
+import {
   Users,
   Copy,
   Check,
@@ -21,7 +26,8 @@ import {
   LogIn,
   Swords,
   Send,
-  X
+  X,
+  Clock
 } from 'lucide-react';
 
 interface RoomLobbyProps {
@@ -34,6 +40,7 @@ interface RoomLobbyProps {
   userProfile?: UserProfile | null;
   friends?: { uid: string; name: string; avatar: string }[];
   incomingInvites?: RoomInvite[];
+  invitedRoomsInfo?: Record<string, InvitedRoomStatusInfo>;
   pendingFriendsCount?: number;
   onOpenAuth?: () => void;
   onNavigateTab?: (tab: AppTab) => void;
@@ -52,6 +59,7 @@ interface RoomLobbyProps {
   onAddBotPlayer: () => void;
   onToggleReady: () => void;
   onLeaveRoom: () => void;
+  onCloseRoom?: () => void;
 }
 
 const isMotifDefaultName = (val: string): boolean => {
@@ -70,6 +78,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
   userProfile = null,
   friends = [],
   incomingInvites = [],
+  invitedRoomsInfo = {},
   pendingFriendsCount = 0,
   onOpenAuth,
   onNavigateTab,
@@ -81,7 +90,8 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
   onStartGame,
   onAddBotPlayer,
   onToggleReady,
-  onLeaveRoom
+  onLeaveRoom,
+  onCloseRoom
 }) => {
   const initialMotif =
     getKilimMotif(userProfile?.avatar || currentUser.avatar) || KILIM_MOTIFS[0];
@@ -273,46 +283,87 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
               <Sparkles className="w-4 h-4" />
               <span>Arkadaşından Canlı Oda Daveti Var!</span>
             </div>
-            {incomingInvites.map((inv) => (
-              <div
-                key={inv.id}
-                className="p-3 rounded-2xl bg-[#0d1629]/85 border border-white/10 flex flex-wrap items-center justify-between gap-2.5"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <KilimAvatar avatar={inv.senderAvatar} size={36} />
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-white truncate">
-                      {inv.senderName} seni <span className="font-mono text-[#FFBE0B]">{inv.roomCode}</span> odasına davet etti
+            {incomingInvites.map((inv) => {
+              const roomInfo = invitedRoomsInfo[inv.roomCode];
+              const isClosed = Boolean(
+                roomInfo && (!roomInfo.exists || roomInfo.status === 'closed')
+              );
+              const isGameOver = roomInfo?.status === 'game_over';
+              const isUnavailable = isClosed || isGameOver;
+              const dateTimeText = formatInviteDateTime(inv.updatedAt || inv.createdAt);
+
+              return (
+                <div
+                  key={inv.id}
+                  className="p-3 rounded-2xl bg-[#0d1629]/85 border border-white/10 flex flex-wrap items-center justify-between gap-2.5"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <KilimAvatar avatar={inv.senderAvatar} size={36} />
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="text-xs font-bold text-white truncate">
+                        {inv.senderName} seni <span className="font-mono text-[#FFBE0B]">{inv.roomCode}</span> odasına davet etti
+                      </div>
+                      <div className="text-[11px] text-[#93C5FD] truncate">{inv.roomTitle}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {dateTimeText && (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-[#CBD5E1]">
+                            <Clock className="w-3 h-3 text-[#00F5D4]" />
+                            <span>{dateTimeText}</span>
+                          </span>
+                        )}
+                        {isClosed && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#FF006E]/20 text-rose-200 border border-[#FF006E]/45 font-bold">
+                            Oda Kaldırıldı
+                          </span>
+                        )}
+                        {isGameOver && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#FFBE0B]/20 text-[#FDE68A] border border-[#FFBE0B]/45 font-bold">
+                            Oyun Sona Erdi
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-[#93C5FD] truncate">{inv.roomTitle}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {!isUnavailable ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playTone('tap');
+                          onAcceptInvite?.(inv);
+                        }}
+                        className="px-3.5 py-2 rounded-xl btn-epic-turquoise text-xs font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Swords className="w-3.5 h-3.5" />
+                        <span>Hemen Katıl</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playTone('tap');
+                          onDismissInvite?.(inv);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[11px] font-semibold text-[#CBD5E1] cursor-pointer"
+                      >
+                        Bildirimi Kapat
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTone('tap');
+                        onDismissInvite?.(inv);
+                      }}
+                      className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-[#CBD5E1] cursor-pointer"
+                      title="Daveti Kapat"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playTone('tap');
-                      onAcceptInvite?.(inv);
-                    }}
-                    className="px-3.5 py-2 rounded-xl btn-epic-turquoise text-xs font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    <Swords className="w-3.5 h-3.5" />
-                    <span>Hemen Katıl</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playTone('tap');
-                      onDismissInvite?.(inv);
-                    }}
-                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-[#CBD5E1] cursor-pointer"
-                    title="Daveti Kapat"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -322,7 +373,9 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
             <div className="p-3 rounded-2xl bg-gradient-to-br from-[#3A86FF]/28 to-[#14213D] border-2 border-[#3A86FF]/70 text-left shadow-lg">
               <Users className="w-5 h-5 text-[#00F5D4] mb-1.5" />
               <div className="font-display text-xs font-bold text-white">Yarışma Odaları</div>
-              <div className="text-[10px] text-[#93C5FD] mt-0.5">1. lik +150 puan</div>
+              <div className="text-[10px] text-[#93C5FD] mt-0.5">
+                1. lik: Kişi × {POINTS_PER_PLAYER_MULTIPLAYER_WIN}p
+              </div>
             </div>
 
             <button
@@ -400,7 +453,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                       Hoş geldin, {userProfile.username}
                     </div>
                     <div className="text-[11px] text-[#93C5FD]">
-                      Liderlik Puanı: <strong className="text-[#FFBE0B]">{userProfile.points}</strong> · Oda 1. liği +150p
+                      Liderlik Puanı: <strong className="text-[#FFBE0B]">{userProfile.points}</strong> · Oda 1. liği: Oyuncu × {POINTS_PER_PLAYER_MULTIPLAYER_WIN}p
                     </div>
                   </div>
                 </div>
@@ -750,7 +803,10 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
             ⏱️ Süre: <strong className="text-white">{room.settings.timeLimitSeconds} sn</strong>
           </span>
           <span className="px-3 py-1 rounded-full bg-[#FFBE0B]/15 border border-[#FFBE0B]/35 text-[#FFBE0B] flex items-center gap-1.5 font-semibold">
-            <Sparkles className="w-3 h-3" /> 1. Lik Ödülü: +150 Liderlik Puanı
+            <Sparkles className="w-3 h-3" />{' '}
+            {room.players.length >= 2
+              ? `1. Lik Ödülü: +${room.players.length * POINTS_PER_PLAYER_MULTIPLAYER_WIN} Puan (${room.players.length} Oyuncu × ${POINTS_PER_PLAYER_MULTIPLAYER_WIN})`
+              : `1. Lik Ödülü: Oyuncu Sayısı × ${POINTS_PER_PLAYER_MULTIPLAYER_WIN} Puan`}
           </span>
         </div>
       </div>
@@ -934,11 +990,15 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
         <button
           onClick={() => {
             playTone('tap');
-            onLeaveRoom();
+            if (isHost && onCloseRoom) {
+              onCloseRoom();
+            } else {
+              onLeaveRoom();
+            }
           }}
           className="w-full sm:w-1/3 py-3.5 rounded-2xl bg-white/10 text-[#CBD5E1] hover:text-white hover:bg-white/15 border border-white/15 text-xs font-bold transition-colors cursor-pointer"
         >
-          Odadan Ayrıl
+          {isHost && onCloseRoom ? 'Odayı Kapat' : 'Odadan Ayrıl'}
         </button>
 
         {!isHost && (

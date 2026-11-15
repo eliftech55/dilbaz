@@ -119,7 +119,13 @@ export class RoomFirestore {
       throw new Error(`"${normalizedCode}" kodlu oda bulunamadı. Lütfen kodu kontrol edin.`);
     }
 
-    const roomData = snap.data() as Room;
+    const roomData = snap.data() as Room & {
+      departedPlayers?: Record<string, { totalPoints: number; name: string; avatar: string }>;
+    };
+
+    if (roomData.status === 'closed') {
+      throw new Error('Bu oda kurucusu tarafından kapatıldı (oda kaldırıldı).');
+    }
 
     const players = (roomData.players || []).map(p => {
       const cleanP: any = {
@@ -135,8 +141,20 @@ export class RoomFirestore {
     });
 
     const existingIndex = players.findIndex(p => p.id === player.id);
+    const departedInfo = roomData.departedPlayers?.[player.id];
+    const hasRoundHistory = Boolean(
+      roomData.roundScores &&
+        Object.values(roomData.roundScores).some(
+          (scores) => Array.isArray(scores) && scores.some((s) => s.playerId === player.id)
+        )
+    );
+    const canRejoinMidGame = existingIndex >= 0 || Boolean(departedInfo) || hasRoundHistory;
 
-    if (roomData.status !== 'waiting' && existingIndex < 0) {
+    if (roomData.status === 'game_over' && existingIndex < 0) {
+      throw new Error('Bu odadaki oyun sona erdi.');
+    }
+
+    if (roomData.status !== 'waiting' && !canRejoinMidGame) {
       throw new Error('Bu odada yarışma başladı. Lobiye yeni katılımcı kabul edilmiyor.');
     }
 
@@ -151,14 +169,32 @@ export class RoomFirestore {
         finalName = `${player.name} (${countSameName + 1})`;
       }
 
-      players.push({
+      let restoredPoints = Number(departedInfo?.totalPoints) || 0;
+      if (!restoredPoints && roomData.roundScores) {
+        for (const scores of Object.values(roomData.roundScores)) {
+          if (Array.isArray(scores)) {
+            const match = scores.find((s) => s.playerId === player.id);
+            if (match) restoredPoints += Number(match.totalScore) || 0;
+          }
+        }
+      }
+
+      const currentRoundScores = roomData.roundScores?.[roomData.currentRound] || [];
+      const currentRoundMatch = currentRoundScores.find((s) => s.playerId === player.id);
+
+      const newPlayer: any = {
         id: player.id,
         name: finalName,
         avatar: player.avatar || 'kilim-kocboynuzu',
-        isHost: false,
+        isHost: players.length === 0,
         isReady: true,
-        totalPoints: 0
-      });
+        totalPoints: restoredPoints
+      };
+      if (currentRoundMatch) {
+        newPlayer.currentRoundScore = currentRoundMatch;
+      }
+
+      players.push(newPlayer);
     }
 
     const cleanPayload = deepCleanForFirestore({
@@ -538,26 +574,80 @@ export class RoomFirestore {
     const snap = await getDoc(roomRef);
     if (!snap.exists()) return;
 
-    const roomData = snap.data() as Room;
+    const roomData = snap.data() as Room & {
+      departedPlayers?: Record<string, { totalPoints: number; name: string; avatar: string }>;
+    };
+    const leavingPlayer = (roomData.players || []).find(p => p.id === playerId);
     const players = (roomData.players || []).filter(p => p.id !== playerId);
+    const remainingHumans = players.filter(p => !p.id.startsWith('bot-'));
 
-    if (players.length === 0) {
+    const departedPlayers = { ...(roomData.departedPlayers || {}) };
+    if (leavingPlayer && !leavingPlayer.id.startsWith('bot-')) {
+      departedPlayers[playerId] = {
+        totalPoints: Number(leavingPlayer.totalPoints) || 0,
+        name: leavingPlayer.name,
+        avatar: leavingPlayer.avatar
+      };
+    }
+
+    if (remainingHumans.length === 0) {
+      await updateDoc(roomRef, deepCleanForFirestore({
+        players: [],
+        status: 'closed',
+        departedPlayers,
+        updatedAt: Date.now()
+      }));
       return;
     }
 
     let hostId = roomData.hostId;
     let hostName = roomData.hostName;
 
-    if (hostId === playerId && players.length > 0) {
-      hostId = players[0].id;
-      hostName = players[0].name;
-      players[0].isHost = true;
+    if (hostId === playerId && remainingHumans.length > 0) {
+      const nextHost = remainingHumans[0];
+      hostId = nextHost.id;
+      hostName = nextHost.name;
+      players.forEach(p => {
+        p.isHost = p.id === nextHost.id;
+      });
+    }
+
+    let nextStatus = roomData.status;
+    if (roomData.status === 'in_round') {
+      const roundScores = roomData.roundScores?.[roomData.currentRound] || [];
+      const allRemainingScored = players.every(p =>
+        roundScores.some(s => s.playerId === p.id)
+      );
+      if (allRemainingScored) {
+        nextStatus = 'round_result';
+      }
     }
 
     await updateDoc(roomRef, deepCleanForFirestore({
       players,
       hostId,
       hostName,
+      status: nextStatus,
+      departedPlayers,
+      updatedAt: Date.now()
+    }));
+  }
+
+  /**
+   * Host explicitly closes/removes the room so invited friends see it is closed
+   */
+  public static async closeRoom(code: string, hostId: string): Promise<void> {
+    const normalizedCode = code.trim().toUpperCase();
+    const roomRef = doc(db, 'rooms', normalizedCode);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) return;
+
+    const roomData = snap.data() as Room;
+    if (roomData.hostId !== hostId) return;
+
+    await updateDoc(roomRef, deepCleanForFirestore({
+      status: 'closed',
+      players: [],
       updatedAt: Date.now()
     }));
   }

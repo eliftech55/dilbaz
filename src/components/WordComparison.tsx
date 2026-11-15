@@ -107,28 +107,6 @@ export const WordComparison: React.FC<WordComparisonProps> = ({
           })}
         </div>
       </div>
-
-      {/* Live Speech Transcript Box */}
-      <div className="p-3.5 bg-[#14213D]/90 rounded-2xl border border-[#3A86FF]/35 text-xs sm:text-sm shadow-lg">
-        <div className="flex items-center justify-between text-[#93C5FD] mb-1">
-          <span className="flex items-center gap-2 font-semibold">
-            <span
-              className={`w-2.5 h-2.5 rounded-full ${
-                isListening ? 'bg-[#00F5D4] animate-ping' : 'bg-slate-500'
-              }`}
-            />
-            {isListening ? 'Mikrofon Dinleniyor...' : 'Son Algılanan Konuşma'}
-          </span>
-          <span className="text-[11px] text-[#94A3B8] font-mono">Türkçe Ses Motoru</span>
-        </div>
-        <p className="text-[#F8FAFC] italic min-h-[1.5rem] break-words">
-          {spokenTranscript || (
-            <span className="text-[#94A3B8]">
-              Henüz ses algılanmadı. Mikrofon açıkken tekerlemeyi net ve hızlı okuyun...
-            </span>
-          )}
-        </p>
-      </div>
     </div>
   );
 };

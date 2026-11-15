@@ -6,7 +6,9 @@ import { PWAInstallButton } from './PWAInstallButton';
 import {
   sendFriendRequestByEmail,
   acceptFriendRequest,
-  declineOrRemoveFriend
+  declineOrRemoveFriend,
+  InvitedRoomStatusInfo,
+  formatInviteDateTime
 } from '../firebase/friendsFirestore';
 import {
   getNotificationSupportState,
@@ -37,6 +39,7 @@ interface FriendsPanelProps {
   userProfile: UserProfile | null;
   friendships: Friendship[];
   incomingInvites: RoomInvite[];
+  invitedRoomsInfo?: Record<string, InvitedRoomStatusInfo>;
   activeRoom: Room | null;
   onOpenAuth: () => void;
   onCreateRoomAndInvite: (friendUid: string, friendName: string) => Promise<void>;
@@ -50,6 +53,7 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
   userProfile,
   friendships,
   incomingInvites,
+  invitedRoomsInfo = {},
   activeRoom,
   onOpenAuth,
   onCreateRoomAndInvite,
@@ -320,48 +324,106 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
             <span>Gelen Oda Davetleri ({pendingInvites.length})</span>
           </h2>
           <div className="space-y-2.5">
-            {pendingInvites.map((invite) => (
-              <div
-                key={invite.id}
-                className="p-3.5 rounded-2xl bg-[#0d1629]/90 border border-[#FFBE0B]/35 flex flex-wrap items-center justify-between gap-3"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <KilimAvatar avatar={invite.senderAvatar} size={42} />
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-white truncate">
-                      {invite.senderName} seni yarışmaya çağırıyor!
-                    </div>
-                    <div className="text-xs text-[#93C5FD]">
-                      Oda Kodu: <strong className="font-mono text-[#FFBE0B]">{invite.roomCode}</strong> · {invite.roomTitle}
+            {pendingInvites.map((invite) => {
+              const roomInfo = invitedRoomsInfo[invite.roomCode];
+              const isClosed = Boolean(
+                roomInfo && (!roomInfo.exists || roomInfo.status === 'closed')
+              );
+              const isGameOver = roomInfo?.status === 'game_over';
+              const isInProgress =
+                roomInfo?.status === 'in_round' ||
+                roomInfo?.status === 'round_result' ||
+                roomInfo?.status === 'countdown';
+              const isUnavailable = isClosed || isGameOver;
+              const dateTimeText = formatInviteDateTime(invite.updatedAt || invite.createdAt);
+
+              return (
+                <div
+                  key={invite.id}
+                  className={`p-3.5 rounded-2xl border flex flex-wrap items-center justify-between gap-3 ${
+                    isUnavailable
+                      ? 'bg-[#0d1629]/65 border-white/15 opacity-90'
+                      : 'bg-[#0d1629]/90 border-[#FFBE0B]/35'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <KilimAvatar avatar={invite.senderAvatar} size={42} />
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="text-sm font-bold text-white truncate">
+                        {invite.senderName} seni yarışmaya çağırıyor!
+                      </div>
+                      <div className="text-xs text-[#93C5FD] flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span>
+                          Oda Kodu:{' '}
+                          <strong className="font-mono text-[#FFBE0B]">{invite.roomCode}</strong> ·{' '}
+                          {invite.roomTitle}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                        {dateTimeText && (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-[#CBD5E1]">
+                            <Clock className="w-3 h-3 text-[#00F5D4]" />
+                            <span>{dateTimeText}</span>
+                          </span>
+                        )}
+                        {isClosed && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#FF006E]/20 text-rose-200 border border-[#FF006E]/45 font-bold">
+                            Oda Kaldırıldı
+                          </span>
+                        )}
+                        {isGameOver && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#FFBE0B]/20 text-[#FDE68A] border border-[#FFBE0B]/45 font-bold">
+                            Oyun Sona Erdi
+                          </span>
+                        )}
+                        {isInProgress && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#3A86FF]/20 text-[#93C5FD] border border-[#3A86FF]/45 font-bold">
+                            Oyun Devam Ediyor
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
+                  <div className="flex items-center gap-2">
+                    {!isUnavailable ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playTone('tap');
+                          onAcceptRoomInvite(invite);
+                        }}
+                        className="px-4 py-2 rounded-xl btn-epic-turquoise text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Swords className="w-3.5 h-3.5" />
+                        <span>Odaya Katıl</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playTone('tap');
+                          onDismissRoomInvite(invite);
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-[#CBD5E1] cursor-pointer"
+                      >
+                        Bildirimi Kapat
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTone('tap');
+                        onDismissRoomInvite(invite);
+                      }}
+                      className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-[#CBD5E1] hover:text-white cursor-pointer"
+                      title="Yoksay"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playTone('tap');
-                      onAcceptRoomInvite(invite);
-                    }}
-                    className="px-4 py-2 rounded-xl btn-epic-turquoise text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Swords className="w-3.5 h-3.5" />
-                    <span>Odaya Katıl</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playTone('tap');
-                      onDismissRoomInvite(invite);
-                    }}
-                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-[#CBD5E1] hover:text-white cursor-pointer"
-                    title="Yoksay"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}

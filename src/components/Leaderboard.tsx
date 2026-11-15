@@ -3,7 +3,7 @@ import { Room } from '../types/game';
 import { DilbazMascot } from './DilbazMascot';
 import { KilimAvatar } from './KilimAvatar';
 import { triggerCelebration } from './FxCanvas';
-import { claimMultiplayerWinReward, POINTS_FOR_MULTIPLAYER_WIN } from '../firebase/authService';
+import { claimMultiplayerWinReward, POINTS_PER_PLAYER_MULTIPLAYER_WIN } from '../firebase/authService';
 import { playTone } from '../utils/soundEffects';
 import { Trophy, RotateCcw, Star, Sparkles } from 'lucide-react';
 
@@ -49,7 +49,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
       return;
     }
 
-    const dynamicRewardPoints = Math.max(2, room.players.length) * 20;
+    const dynamicRewardPoints = Math.max(2, room.players.length) * POINTS_PER_PLAYER_MULTIPLAYER_WIN;
     const attemptKey = `${room.code}_${authUid}`;
     if (claimedRef.current === attemptKey) return;
     claimedRef.current = attemptKey;
@@ -59,15 +59,15 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
       .then((res) => {
         if (res.claimed) {
           setWinRewardMessage(
-            `Tebrikler! Çok oyunculu yarışma 1. liği ödülü olarak +${res.pointsAdded || dynamicRewardPoints} Dilbaz Liderlik Puanı hesabınıza eklendi!`
+            `Tebrikler! Oda 1. liği ödülü olarak +${res.pointsAdded || dynamicRewardPoints} Dilbaz Liderlik Puanı hesabınıza eklendi!`
           );
         } else if (res.alreadyClaimed) {
           setWinRewardMessage(
-            `Bu odanın 1. lik ödülü (+${dynamicRewardPoints} Puan) hesabınıza eklendi.`
+            `Bu odanın 1. lik ödülü (+${res.pointsAdded || dynamicRewardPoints} Puan) hesabınıza eklendi.`
           );
         } else if (res.reason === 'solo_left') {
           setWinRewardError(
-            'Odada tek başınıza kaldığınız için (diğer oyuncular ayrıldığı için) çok oyunculu 1. lik puanı verilmemektedir.'
+            'Odada tek başınıza kaldığınız için (diğer oyuncular ayrıldığı için) oda 1. liği puanı verilmemektedir.'
           );
         } else if (res.reason === 'no_profile') {
           setWinRewardError(
@@ -119,7 +119,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
 
         {isWinnerGuest && (
           <div className="mt-3 p-3 rounded-2xl bg-[#FFBE0B]/15 border border-[#FFBE0B]/40 text-[#FDE68A] text-xs">
-            Bilgi: Çok oyunculu oda 1. liklerinden +{Math.max(2, room.players.length) * 20} Liderlik Puanı (Kişi x 20) kazanmak için yarışma öncesi giriş yapın.
+            Bilgi: Oda 1. liklerinden +{Math.max(2, room.players.length) * POINTS_PER_PLAYER_MULTIPLAYER_WIN} Liderlik Puanı (Oyuncu Sayısı × {POINTS_PER_PLAYER_MULTIPLAYER_WIN}) kazanmak için yarışma öncesi giriş yapın.
           </div>
         )}
       </div>

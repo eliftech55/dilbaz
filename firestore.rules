@@ -160,11 +160,11 @@ service cloud.firestore {
           && incoming().uid == existing().uid
           && incoming().createdAt == existing().createdAt
           && incoming().diff(existing()).affectedKeys().hasOnly(['points', 'multiplayerWins', 'lastClaimId', 'updatedAt'])
-          && incoming().points == existing().points + 150
           && incoming().multiplayerWins == existing().multiplayerWins + 1
-          && incoming().lastClaimId is string
+          && incoming().lastClaimId is string && incoming().lastClaimId.size() <= 160
           && !exists(/databases/$(database)/documents/winClaims/$(incoming().lastClaimId))
           && existsAfter(/databases/$(database)/documents/winClaims/$(incoming().lastClaimId))
+          && incoming().points == existing().points + getAfter(/databases/$(database)/documents/winClaims/$(incoming().lastClaimId)).data.pointsAwarded
         )
       );
       allow delete: if isAdmin() && isValidId(userId) && userId != request.auth.uid;
@@ -245,15 +245,20 @@ service cloud.firestore {
       allow list: if false;
       allow create: if isSignedIn()
         && isValidId(claimId)
-        && incoming().keys().hasAll(['uid', 'roomCode', 'createdAt'])
-        && incoming().keys().hasOnly(['uid', 'roomCode', 'createdAt'])
+        && incoming().keys().hasAll(['uid', 'roomCode', 'pointsAwarded', 'createdAt'])
+        && incoming().keys().hasOnly(['uid', 'roomCode', 'pointsAwarded', 'createdAt'])
         && incoming().uid == request.auth.uid
         && incoming().roomCode is string && incoming().roomCode.size() <= 32
         && claimId == (incoming().roomCode + '_' + request.auth.uid)
+        && incoming().pointsAwarded is number
+        && incoming().pointsAwarded >= 40
+        && incoming().pointsAwarded <= 10000
         && incoming().createdAt is number
         && !exists(/databases/$(database)/documents/winClaims/$(claimId))
         && get(/databases/$(database)/documents/rooms/$(incoming().roomCode)).data.status == 'game_over'
-        && get(/databases/$(database)/documents/rooms/$(incoming().roomCode)).data.winnerId == request.auth.uid;
+        && get(/databases/$(database)/documents/rooms/$(incoming().roomCode)).data.winnerId == request.auth.uid
+        && get(/databases/$(database)/documents/rooms/$(incoming().roomCode)).data.players.size() >= 2
+        && incoming().pointsAwarded == get(/databases/$(database)/documents/rooms/$(incoming().roomCode)).data.players.size() * 20;
       allow update, delete: if false;
     }
 

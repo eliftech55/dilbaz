@@ -8,7 +8,7 @@ import { WordComparison } from './WordComparison';
 import { MascotDialogue } from './DilbazMascot';
 import { triggerCelebration } from './FxCanvas';
 import { playTone, playComboWordTone } from '../utils/soundEffects';
-import { Mic, Square, Volume2, Shuffle, Zap } from 'lucide-react';
+import { Mic, Square, Volume2, Shuffle } from 'lucide-react';
 
 interface SoloPracticeProps {
   tekerlemeler: Tekerleme[];
@@ -100,9 +100,12 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
     }
   };
 
-  const handleStopPractice = async (overrideTranscript?: string) => {
-    const startMs = startTimeRef.current || Date.now() - 2000;
-    const duration = Math.max(0.8, (Date.now() - startMs) / 1000);
+  const handleStopPractice = async () => {
+    const rawStartMs = startTimeRef.current || Date.now() - 2000;
+    const effectiveStartMs = speechEngineRef.current
+      ? speechEngineRef.current.getEffectiveStartTime(rawStartMs)
+      : rawStartMs;
+    const duration = Math.max(0.8, (Date.now() - effectiveStartMs) / 1000);
 
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -113,17 +116,11 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
 
     let finalRecorded = '';
     if (speechEngineRef.current) {
-      if (overrideTranscript !== undefined) {
-        finalRecorded = speechEngineRef.current.stop();
-      } else {
-        finalRecorded = await speechEngineRef.current.stopAsync();
-      }
+      finalRecorded = await speechEngineRef.current.stopAsync();
     }
 
     const textToEvaluate =
-      overrideTranscript !== undefined
-        ? overrideTranscript
-        : finalRecorded.length >= transcriptRef.current.length
+      finalRecorded.length >= transcriptRef.current.length
         ? finalRecorded
         : transcriptRef.current;
 
@@ -143,16 +140,6 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
     } else {
       playTone('wrong');
     }
-  };
-
-  const handleSimulateFastRead = () => {
-    if (!startTimeRef.current) {
-      startTimeRef.current = Date.now() - Math.round(selectedTekerleme.benchmarkSeconds * 1000);
-    }
-    const perfectText = selectedTekerleme.text;
-    transcriptRef.current = perfectText;
-    setSpokenTranscript(perfectText);
-    handleStopPractice(perfectText);
   };
 
   const handlePlayAudioHint = () => {
@@ -302,15 +289,6 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
             <span>OKUMAYI BİTİR ({elapsed.toFixed(1)} sn)</span>
           </button>
         )}
-
-        <button
-          onClick={handleSimulateFastRead}
-          className="px-4 py-3.5 rounded-[18px] bg-white/10 hover:bg-white/15 text-white border border-white/15 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-          title="Otomatik okuma simülasyonu"
-        >
-          <Zap className="w-4 h-4 text-[#FFBE0B]" />
-          <span>Simüle Hızlı Oku</span>
-        </button>
       </div>
 
       {/* Practice Results Card */}

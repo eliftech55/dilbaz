@@ -23,7 +23,7 @@
         },
         "status": {
           "type": "string",
-          "description": "Room status: waiting, in_round, round_result, game_over"
+          "description": "Room status: waiting, in_round, round_result, game_over, closed"
         },
         "currentRound": {
           "type": "number",
@@ -128,9 +128,10 @@
       "properties": {
         "uid": { "type": "string" },
         "roomCode": { "type": "string", "maxLength": 32 },
+        "pointsAwarded": { "type": "number" },
         "createdAt": { "type": "number" }
       },
-      "required": ["uid", "roomCode", "createdAt"]
+      "required": ["uid", "roomCode", "pointsAwarded", "createdAt"]
     },
     "UserNotification": {
       "title": "UserNotification",

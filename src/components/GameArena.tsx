@@ -155,7 +155,12 @@ export const GameArena: React.FC<GameArenaProps> = ({
     if (hasSubmittedRef.current) return;
     hasSubmittedRef.current = true;
 
-    const duration = Math.max(0.8, (Date.now() - startTimeRef.current) / 1000);
+    const rawStartMs = startTimeRef.current || Date.now() - 2000;
+    const effectiveStartMs =
+      overrideTranscript === undefined && speechEngineRef.current
+        ? speechEngineRef.current.getEffectiveStartTime(rawStartMs)
+        : rawStartMs;
+    const duration = Math.max(0.8, (Date.now() - effectiveStartMs) / 1000);
 
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);

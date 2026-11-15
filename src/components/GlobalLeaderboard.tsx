@@ -6,7 +6,7 @@ import {
   setMemberRoleAsAdmin,
   deleteMemberAsAdmin,
   POINTS_FOR_APPROVED_TEKERLEME,
-  POINTS_FOR_MULTIPLAYER_WIN
+  POINTS_PER_PLAYER_MULTIPLAYER_WIN
 } from '../firebase/authService';
 import { KilimAvatar } from './KilimAvatar';
 import { RumiCorners } from './EbruBackground';
@@ -124,7 +124,7 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
               Telaffuz Ustaları Sıralaması
             </h1>
             <p className="text-xs text-[#CBD5E1]">
-              Onaylanan tekerleme katkıları ve çok oyunculu oda birincilikleriyle kazanılan resmi Dilbaz puanları.
+              Onaylanan tekerleme katkıları ve oda birincilikleriyle kazanılan resmi Dilbaz puanları.
             </p>
           </div>
 
@@ -171,8 +171,12 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
           <div className="p-3 rounded-2xl bg-[#FFBE0B]/15 border border-[#FFBE0B]/40 flex items-center gap-2.5">
             <Crown className="w-5 h-5 text-[#FFBE0B] shrink-0" />
             <div>
-              <div className="font-bold text-white">+{POINTS_FOR_MULTIPLAYER_WIN} Puan</div>
-              <div className="text-[11px] text-[#CBD5E1]">Çok oyunculu oda birinciliği</div>
+              <div className="font-bold text-white">
+                +Oyuncu Sayısı × {POINTS_PER_PLAYER_MULTIPLAYER_WIN} Puan
+              </div>
+              <div className="text-[11px] text-[#CBD5E1]">
+                Oda birinciliği ödülü (kalabalık odalarda daha fazla puan)
+              </div>
             </div>
           </div>
         </div>

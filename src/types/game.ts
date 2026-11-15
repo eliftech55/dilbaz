@@ -79,7 +79,7 @@ export interface PlayerScore {
   badge?: string;
 }
 
-export type RoomStatus = 'waiting' | 'countdown' | 'in_round' | 'round_result' | 'game_over';
+export type RoomStatus = 'waiting' | 'countdown' | 'in_round' | 'round_result' | 'game_over' | 'closed';
 
 export interface RoomSettings {
   roundCount: number;

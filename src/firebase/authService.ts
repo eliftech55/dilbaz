@@ -33,7 +33,7 @@ import { syncMyEmailDirectory } from './friendsFirestore';
 
 export const ADMIN_EMAIL = 'elifgencosmanoglu@gmail.com';
 export const POINTS_FOR_APPROVED_TEKERLEME = 100;
-export const POINTS_FOR_MULTIPLAYER_WIN = 150;
+export const POINTS_PER_PLAYER_MULTIPLAYER_WIN = 20;
 
 /**
  * Normalizes a custom username into a Firestore-safe document ID matching ^[a-zA-Z0-9_.\-@]+$
@@ -338,24 +338,38 @@ export async function claimMultiplayerWinReward(
   if (playerCount <= 1) {
     return { claimed: false, reason: 'solo_left', pointsAdded: 0 };
   }
-  const dynamicPoints = Math.max(2, playerCount) * 20;
+
   const claimId = `${roomCode}_${uid}`;
   const claimRef = doc(db, 'winClaims', claimId);
   const profileRef = doc(db, 'publicProfiles', uid);
+  const roomRef = doc(db, 'rooms', roomCode);
 
   try {
-    const [claimSnap, profileSnap] = await Promise.all([
+    const [claimSnap, profileSnap, roomSnap] = await Promise.all([
       getDoc(claimRef),
-      getDoc(profileRef)
+      getDoc(profileRef),
+      getDoc(roomRef)
     ]);
 
     if (claimSnap.exists()) {
-      return { claimed: false, alreadyClaimed: true, pointsAdded: 0 };
+      const existingPoints =
+        Number(claimSnap.data()?.pointsAwarded) ||
+        Math.max(2, playerCount) * POINTS_PER_PLAYER_MULTIPLAYER_WIN;
+      return { claimed: false, alreadyClaimed: true, pointsAdded: existingPoints };
     }
     if (!profileSnap.exists()) {
       return { claimed: false, reason: 'no_profile', pointsAdded: 0 };
     }
 
+    const livePlayerCount = roomSnap.exists()
+      ? (Array.isArray(roomSnap.data()?.players) ? roomSnap.data().players.length : playerCount)
+      : playerCount;
+
+    if (livePlayerCount <= 1) {
+      return { claimed: false, reason: 'solo_left', pointsAdded: 0 };
+    }
+
+    const dynamicPoints = livePlayerCount * POINTS_PER_PLAYER_MULTIPLAYER_WIN;
     const currentProfile = profileSnap.data() as UserProfile;
     const now = Date.now();
     const batch = writeBatch(db);

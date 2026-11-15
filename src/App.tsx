@@ -40,7 +40,11 @@ import {
   subscribeToMyFriendships,
   subscribeToMyRoomInvites,
   sendRoomInviteToFriend,
-  respondToRoomInvite
+  respondToRoomInvite,
+  InvitedRoomStatusInfo,
+  formatInviteDateTime,
+  fetchInvitedRoomStatus,
+  subscribeToRoomStatus
 } from './firebase/friendsFirestore';
 import { Navbar, AppTab } from './components/Navbar';
 import { EbruBackground } from './components/EbruBackground';
@@ -89,9 +93,11 @@ export default function App() {
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [friendships, setFriendships] = useState<Friendship[]>([]);
   const [roomInvites, setRoomInvites] = useState<RoomInvite[]>([]);
+  const [invitedRoomsInfo, setInvitedRoomsInfo] = useState<Record<string, InvitedRoomStatusInfo>>({});
   const seenNotifIdsRef = useRef<Set<string>>(new Set());
   const seenFriendReqIdsRef = useRef<Set<string>>(new Set());
   const seenInviteKeysRef = useRef<Set<string>>(new Set());
+  const notifiedRoomEndKeysRef = useRef<Set<string>>(new Set());
   const initialFriendshipsLoadedRef = useRef<boolean>(false);
   const initialInvitesLoadedRef = useRef<boolean>(false);
 
@@ -331,12 +337,34 @@ export default function App() {
           if (!seenInviteKeysRef.current.has(key)) {
             seenInviteKeysRef.current.add(key);
             playTone('notification');
-            sendMobilePushNotification({
-              title: 'Dilbaz Düellosu Başlıyor! ⚔️',
-              body: `${inv.senderName} seni Dilbaz'da düelloya davet ediyor, acele et!`,
-              tag: `invite_${inv.id}`,
-              roomCode: inv.roomCode,
-              tab: 'room'
+            const dateStr = formatInviteDateTime(inv.updatedAt || inv.createdAt);
+            fetchInvitedRoomStatus(inv.roomCode).then((statusInfo) => {
+              setInvitedRoomsInfo((prev) => ({ ...prev, [inv.roomCode]: statusInfo }));
+              if (!statusInfo.exists || statusInfo.status === 'closed') {
+                notifiedRoomEndKeysRef.current.add(`${inv.id}_closed`);
+                sendMobilePushNotification({
+                  title: 'Oda Daveti · Oda Kaldırıldı',
+                  body: `${inv.senderName} (${dateStr}) seni ${inv.roomCode} odasına davet etmişti ancak oda kurucusu tarafından kapatıldı.`,
+                  tag: `invite_${inv.id}`,
+                  tab: 'friends'
+                });
+              } else if (statusInfo.status === 'game_over') {
+                notifiedRoomEndKeysRef.current.add(`${inv.id}_game_over`);
+                sendMobilePushNotification({
+                  title: 'Oda Daveti · Oyun Sona Erdi',
+                  body: `${inv.senderName} (${dateStr}) seni ${inv.roomCode} odasına davet etmişti ancak bu odadaki oyun sona erdi.`,
+                  tag: `invite_${inv.id}`,
+                  tab: 'friends'
+                });
+              } else {
+                sendMobilePushNotification({
+                  title: 'Dilbaz Düellosu Başlıyor! ⚔️',
+                  body: `${inv.senderName} seni Dilbaz'da düelloya davet ediyor, acele et! (${dateStr})`,
+                  tag: `invite_${inv.id}`,
+                  roomCode: inv.roomCode,
+                  tab: 'room'
+                });
+              }
             });
           }
         }
@@ -434,6 +462,56 @@ export default function App() {
   const [currentRoundUserScore, setCurrentRoundUserScore] = useState<PlayerScore | null>(null);
   const sseUnsubRef = useRef<(() => void) | null>(null);
 
+  // Monitor live status of rooms referenced by pending invites
+  useEffect(() => {
+    const pending = roomInvites.filter((inv) => inv.status === 'pending');
+    if (pending.length === 0) return;
+
+    const uniqueRoomCodes = Array.from(new Set(pending.map((inv) => inv.roomCode)));
+    const unsubs = uniqueRoomCodes.map((code) =>
+      subscribeToRoomStatus(code, (info) => {
+        setInvitedRoomsInfo((prev) => {
+          const prevInfo = prev[code];
+          if (
+            prevInfo &&
+            prevInfo.status !== info.status &&
+            room?.code !== code &&
+            (info.status === 'closed' || info.status === 'game_over' || !info.exists)
+          ) {
+            const matchingInvite = pending.find((i) => i.roomCode === code);
+            if (matchingInvite) {
+              const endType = !info.exists || info.status === 'closed' ? 'closed' : 'game_over';
+              const notifyKey = `${matchingInvite.id}_${endType}`;
+              if (!notifiedRoomEndKeysRef.current.has(notifyKey)) {
+                notifiedRoomEndKeysRef.current.add(notifyKey);
+                const dateStr = formatInviteDateTime(
+                  matchingInvite.updatedAt || matchingInvite.createdAt
+                );
+                sendMobilePushNotification({
+                  title:
+                    endType === 'closed'
+                      ? 'Oda Daveti · Oda Kaldırıldı'
+                      : 'Oda Daveti · Oyun Sona Erdi',
+                  body:
+                    endType === 'closed'
+                      ? `${matchingInvite.senderName} (${dateStr}) tarafından gönderilen ${code} odası kurucusu tarafından kapatıldı.`
+                      : `${matchingInvite.senderName} (${dateStr}) tarafından gönderilen ${code} odasındaki oyun sona erdi.`,
+                  tag: `invite_${matchingInvite.id}`,
+                  tab: 'friends'
+                });
+              }
+            }
+          }
+          return { ...prev, [code]: info };
+        });
+      })
+    );
+
+    return () => {
+      unsubs.forEach((u) => u());
+    };
+  }, [roomInvites, room?.code]);
+
   useEffect(() => {
     registerServiceWorker();
     if (typeof window !== 'undefined') {
@@ -458,6 +536,12 @@ export default function App() {
     const unsub = RoomFirestore.subscribeToRoom(
       room.code,
       (updatedRoom) => {
+        if (updatedRoom.status === 'closed') {
+          setRoom(null);
+          setCurrentRoundUserScore(null);
+          setRoomError('Oda kurucusu odayı kapattı (oda kaldırıldı).');
+          return;
+        }
         setRoom((prev) => {
           if (prev && prev.currentRound !== updatedRoom.currentRound) {
             setCurrentRoundUserScore(null);
@@ -614,6 +698,19 @@ export default function App() {
     if (room) {
       try {
         await RoomFirestore.leaveRoom(room.code, currentUser.id);
+      } catch {
+        // ignore
+      }
+    }
+    setRoom(null);
+    setCurrentRoundUserScore(null);
+    setRoomError(null);
+  };
+
+  const handleCloseRoom = async () => {
+    if (room) {
+      try {
+        await RoomFirestore.closeRoom(room.code, currentUser.id);
       } catch {
         // ignore
       }
@@ -984,6 +1081,7 @@ export default function App() {
                   userProfile={userProfile}
                   friends={acceptedFriendsSummary}
                   incomingInvites={pendingRoomInvites}
+                  invitedRoomsInfo={invitedRoomsInfo}
                   pendingFriendsCount={pendingFriendsBadgeCount}
                   onOpenAuth={() => setIsAuthModalOpen(true)}
                   onNavigateTab={setActiveTab}
@@ -996,6 +1094,7 @@ export default function App() {
                   onAddBotPlayer={handleAddBotPlayer}
                   onToggleReady={handleToggleReady}
                   onLeaveRoom={handleLeaveRoom}
+                  onCloseRoom={handleCloseRoom}
                 />
               )}
 
@@ -1112,6 +1211,7 @@ export default function App() {
               userProfile={userProfile}
               friendships={friendships}
               incomingInvites={roomInvites}
+              invitedRoomsInfo={invitedRoomsInfo}
               activeRoom={room}
               onOpenAuth={() => setIsAuthModalOpen(true)}
               onCreateRoomAndInvite={handleCreateRoomAndInviteFriend}

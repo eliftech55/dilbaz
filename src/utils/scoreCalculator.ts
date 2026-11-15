@@ -36,8 +36,8 @@ interface AlignmentOutput {
 }
 
 /**
- * Unified alignment algorithm shared by live display and final evaluation
- * so mobile and desktop browsers yield identical accuracy for the same speech.
+ * Unified optimal monotonic DP alignment algorithm shared by live display and final evaluation.
+ * Handles 1-to-1, 1-to-2 (mobile split words), and 2-to-1 (merged words) without lookahead jumping/shifting.
  */
 function alignWordsCore(originalText: string, spokenTranscript: string): AlignmentOutput {
   const rawTokens = originalText.split(/\s+/).filter(Boolean);
@@ -46,12 +46,14 @@ function alignWordsCore(originalText: string, spokenTranscript: string): Alignme
     .filter((p) => p.norm.length > 0);
 
   const spokenNormWords = splitWords(spokenTranscript);
+  const M = pairs.length;
+  const N = spokenNormWords.length;
 
-  if (pairs.length === 0) {
+  if (M === 0) {
     return { items: [], accuracy: 0, lastMatchedOrigIdx: -1, spokenWordCount: 0 };
   }
 
-  if (spokenNormWords.length === 0) {
+  if (N === 0) {
     return {
       items: pairs.map((p) => ({ word: p.raw, status: 'pending' as const })),
       accuracy: 0,
@@ -60,108 +62,165 @@ function alignWordsCore(originalText: string, spokenTranscript: string): Alignme
     };
   }
 
+  type OpType = 'none' | 'match11' | 'match12' | 'match21' | 'skipOrig' | 'skipSpoken';
+  const NEG_INF = -1e9;
+  const dp: number[][] = Array.from({ length: M + 1 }, () => Array(N + 1).fill(NEG_INF));
+  const op: OpType[][] = Array.from({ length: M + 1 }, () => Array<OpType>(N + 1).fill('none'));
+  const simStore: number[][] = Array.from({ length: M + 1 }, () => Array(N + 1).fill(0));
+
+  const SKIP_ORIG_PENALTY = -0.45;
+  const SKIP_SPOKEN_PENALTY = -0.12;
+
+  dp[0][0] = 0;
+  for (let i = 1; i <= M; i++) {
+    dp[i][0] = dp[i - 1][0] + SKIP_ORIG_PENALTY;
+    op[i][0] = 'skipOrig';
+  }
+  for (let s = 1; s <= N; s++) {
+    dp[0][s] = dp[0][s - 1] + SKIP_SPOKEN_PENALTY;
+    op[0][s] = 'skipSpoken';
+  }
+
+  for (let i = 1; i <= M; i++) {
+    const origWord = pairs[i - 1].norm;
+    for (let s = 1; s <= N; s++) {
+      // Skip target word T[i-1]
+      let bestScore = dp[i - 1][s] + SKIP_ORIG_PENALTY;
+      let bestOp: OpType = 'skipOrig';
+      let bestSim = 0;
+
+      // Skip extra/noise spoken word S[s-1]
+      const skipSpokenScore = dp[i][s - 1] + SKIP_SPOKEN_PENALTY;
+      if (skipSpokenScore > bestScore) {
+        bestScore = skipSpokenScore;
+        bestOp = 'skipSpoken';
+        bestSim = 0;
+      }
+
+      // 1-to-1 match: T[i-1] <-> S[s-1]
+      const sim11 = wordSimilarity(origWord, spokenNormWords[s - 1]);
+      if (sim11 >= IMPERFECT_THRESHOLD) {
+        const reward11 = sim11 >= CORRECT_THRESHOLD ? 1.2 + sim11 : 0.45 + sim11;
+        const candScore = dp[i - 1][s - 1] + reward11;
+        if (candScore > bestScore) {
+          bestScore = candScore;
+          bestOp = 'match11';
+          bestSim = sim11;
+        }
+      }
+
+      // 1-to-2 match: T[i-1] <-> S[s-2] + S[s-1] (mobile splits compound words)
+      if (s >= 2) {
+        const mergedSpoken = spokenNormWords[s - 2] + spokenNormWords[s - 1];
+        const sim12 = wordSimilarity(origWord, mergedSpoken);
+        const singleBest = Math.max(
+          wordSimilarity(origWord, spokenNormWords[s - 2]),
+          sim11
+        );
+        if (sim12 >= IMPERFECT_THRESHOLD && sim12 > singleBest + 0.05) {
+          const reward12 = sim12 >= CORRECT_THRESHOLD ? 1.2 + sim12 : 0.45 + sim12;
+          const candScore = dp[i - 1][s - 2] + reward12;
+          if (candScore > bestScore) {
+            bestScore = candScore;
+            bestOp = 'match12';
+            bestSim = sim12;
+          }
+        }
+      }
+
+      // 2-to-1 match: T[i-2] + T[i-1] <-> S[s-1] (ASR merges two adjacent target words)
+      if (i >= 2) {
+        const mergedOrig = pairs[i - 2].norm + origWord;
+        const sim21 = wordSimilarity(mergedOrig, spokenNormWords[s - 1]);
+        if (sim21 >= CORRECT_THRESHOLD) {
+          const reward21 = 2.3 + sim21;
+          const candScore = dp[i - 2][s - 1] + reward21;
+          if (candScore > bestScore) {
+            bestScore = candScore;
+            bestOp = 'match21';
+            bestSim = sim21;
+          }
+        }
+      }
+
+      dp[i][s] = bestScore;
+      op[i][s] = bestOp;
+      simStore[i][s] = bestSim;
+    }
+  }
+
+  // Semi-global right end: consume all spoken words N, choose target prefix bestI (0..M) maximizing score
+  let bestI = 0;
+  let bestFinalScore = dp[0][N];
+  for (let i = 1; i <= M; i++) {
+    if (dp[i][N] > bestFinalScore) {
+      bestFinalScore = dp[i][N];
+      bestI = i;
+    }
+  }
+
   const statuses: AlignmentOutput['items'] = pairs.map((p) => ({
     word: p.raw,
     status: 'pending'
   }));
 
-  let spokenIdx = 0;
+  let curI = bestI;
+  let curS = N;
   let lastMatchedOrigIdx = -1;
   let matchedPoints = 0;
 
-  for (let i = 0; i < pairs.length; i++) {
-    if (spokenIdx >= spokenNormWords.length) break;
+  while (curI > 0 || curS > 0) {
+    const action = op[curI][curS];
+    const sim = simStore[curI][curS];
 
-    const origWord = pairs[i].norm;
-    let bestSim = 0;
-    let bestSpokenText = '';
-    let nextSpokenPos = spokenIdx;
-    let matchedTwoOrigWords = false;
-
-    const searchLimit = Math.min(spokenNormWords.length, spokenIdx + 5);
-
-    for (let s = spokenIdx; s < searchLimit; s++) {
-      // 1) Direct 1-to-1 comparison
-      const sim1 = wordSimilarity(origWord, spokenNormWords[s]);
-      if (sim1 > bestSim) {
-        bestSim = sim1;
-        bestSpokenText = spokenNormWords[s];
-        nextSpokenPos = s + 1;
-        matchedTwoOrigWords = false;
-      }
-
-      // 2) Two adjacent spoken words merged (e.g. mobile splits "elalem" -> "el alem")
-      if (s + 1 < searchLimit) {
-        const mergedSpoken = spokenNormWords[s] + spokenNormWords[s + 1];
-        const simMerged = wordSimilarity(origWord, mergedSpoken);
-        if (simMerged > bestSim + 0.05) {
-          bestSim = simMerged;
-          bestSpokenText = `${spokenNormWords[s]} ${spokenNormWords[s + 1]}`;
-          nextSpokenPos = s + 2;
-          matchedTwoOrigWords = false;
-        }
-      }
-
-      // 3) Two adjacent target words merged in ASR (e.g. "bir berber" -> "birberber")
-      if (i + 1 < pairs.length) {
-        const mergedOrig = origWord + pairs[i + 1].norm;
-        const simDoubleOrig = wordSimilarity(mergedOrig, spokenNormWords[s]);
-        if (simDoubleOrig >= CORRECT_THRESHOLD && simDoubleOrig > bestSim) {
-          bestSim = simDoubleOrig;
-          bestSpokenText = spokenNormWords[s];
-          nextSpokenPos = s + 1;
-          matchedTwoOrigWords = true;
-        }
-      }
-    }
-
-    if (bestSim >= CORRECT_THRESHOLD) {
-      statuses[i] = {
-        word: pairs[i].raw,
+    if (action === 'match11') {
+      const idx = curI - 1;
+      const isCorrect = sim >= CORRECT_THRESHOLD;
+      statuses[idx] = {
+        word: pairs[idx].raw,
+        status: isCorrect ? 'correct' : 'imperfect',
+        recognizedAs: spokenNormWords[curS - 1]
+      };
+      matchedPoints += isCorrect ? 1.0 : sim;
+      if (idx > lastMatchedOrigIdx) lastMatchedOrigIdx = idx;
+      curI -= 1;
+      curS -= 1;
+    } else if (action === 'match12') {
+      const idx = curI - 1;
+      const isCorrect = sim >= CORRECT_THRESHOLD;
+      statuses[idx] = {
+        word: pairs[idx].raw,
+        status: isCorrect ? 'correct' : 'imperfect',
+        recognizedAs: `${spokenNormWords[curS - 2]} ${spokenNormWords[curS - 1]}`
+      };
+      matchedPoints += isCorrect ? 1.0 : sim;
+      if (idx > lastMatchedOrigIdx) lastMatchedOrigIdx = idx;
+      curI -= 1;
+      curS -= 2;
+    } else if (action === 'match21') {
+      const idx1 = curI - 2;
+      const idx2 = curI - 1;
+      const spokenText = spokenNormWords[curS - 1];
+      statuses[idx1] = {
+        word: pairs[idx1].raw,
         status: 'correct',
-        recognizedAs: bestSpokenText
+        recognizedAs: spokenText
       };
-      matchedPoints += 1.0;
-      lastMatchedOrigIdx = i;
-
-      if (matchedTwoOrigWords && i + 1 < pairs.length) {
-        statuses[i + 1] = {
-          word: pairs[i + 1].raw,
-          status: 'correct',
-          recognizedAs: bestSpokenText
-        };
-        matchedPoints += 1.0;
-        lastMatchedOrigIdx = i + 1;
-        i += 1;
-      }
-
-      spokenIdx = nextSpokenPos;
-    } else if (bestSim >= IMPERFECT_THRESHOLD) {
-      statuses[i] = {
-        word: pairs[i].raw,
-        status: 'imperfect',
-        recognizedAs: bestSpokenText
+      statuses[idx2] = {
+        word: pairs[idx2].raw,
+        status: 'correct',
+        recognizedAs: spokenText
       };
-      matchedPoints += bestSim;
-      lastMatchedOrigIdx = i;
-      spokenIdx = nextSpokenPos;
+      matchedPoints += 2.0;
+      if (idx2 > lastMatchedOrigIdx) lastMatchedOrigIdx = idx2;
+      curI -= 2;
+      curS -= 1;
+    } else if (action === 'skipOrig') {
+      curI -= 1;
+    } else if (action === 'skipSpoken') {
+      curS -= 1;
     } else {
-      // Do NOT advance spokenIdx aggressively here: check if word i was genuinely skipped
-      // (only mark as missed if a later target word clearly matches right at spokenIdx).
-      let skippedToLater = false;
-      for (let lookOrig = i + 1; lookOrig < Math.min(pairs.length, i + 3); lookOrig++) {
-        if (wordSimilarity(pairs[lookOrig].norm, spokenNormWords[spokenIdx]) >= CORRECT_THRESHOLD) {
-          skippedToLater = true;
-          break;
-        }
-      }
-      if (skippedToLater) {
-        statuses[i] = {
-          word: pairs[i].raw,
-          status: 'missed',
-          recognizedAs: spokenNormWords[spokenIdx]
-        };
-      }
+      break;
     }
   }
 
