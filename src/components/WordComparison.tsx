@@ -9,6 +9,7 @@ interface WordComparisonProps {
   isListening?: boolean;
   liveAccuracy?: number;
   categoryLabel?: string;
+  justMatchedIndices?: number[];
 }
 
 export const WordComparison: React.FC<WordComparisonProps> = ({
@@ -16,7 +17,8 @@ export const WordComparison: React.FC<WordComparisonProps> = ({
   spokenTranscript = '',
   isListening = false,
   liveAccuracy = 0,
-  categoryLabel = 'Canlı Telaffuz Kartı'
+  categoryLabel = 'Canlı Telaffuz Kartı',
+  justMatchedIndices = []
 }) => {
   const correctCount = originalWords.filter((w) => w.status === 'correct').length;
 
@@ -67,13 +69,15 @@ export const WordComparison: React.FC<WordComparisonProps> = ({
         {/* Interactive Word Grid with High-Contrast Green/Amber/Red Tracking */}
         <div className="relative z-10 flex flex-wrap gap-2 text-lg sm:text-2xl font-display font-bold leading-relaxed">
           {originalWords.map((item, idx) => {
+            const isJustMatched = justMatchedIndices.includes(idx);
             let style =
               'bg-white/85 text-[#14213D] border border-[#3A86FF]/20 shadow-xs';
             let icon = null;
 
             if (item.status === 'correct') {
-              style =
-                'bg-[#06D6A0]/25 text-[#065F46] border-2 border-[#06D6A0] shadow-sm shadow-[#06D6A0]/25 animate-word-pop';
+              style = isJustMatched
+                ? 'bg-[#06D6A0]/35 text-[#065F46] border-2 border-[#06D6A0] ring-2 ring-[#FFBE0B]/70 shadow-md shadow-[#06D6A0]/35 animate-word-pop'
+                : 'bg-[#06D6A0]/25 text-[#065F46] border-2 border-[#06D6A0] shadow-sm shadow-[#06D6A0]/25 animate-word-pop';
               icon = (
                 <CheckCircle2 className="w-4 h-4 text-[#059669] inline ml-1.5 shrink-0" />
               );
@@ -97,6 +101,7 @@ export const WordComparison: React.FC<WordComparisonProps> = ({
             return (
               <span
                 key={idx}
+                data-word-index={idx}
                 className={`px-3 py-1 rounded-xl transition-all duration-200 inline-flex items-center ${style}`}
                 title={item.recognizedAs ? `Algılanan: "${item.recognizedAs}"` : undefined}
               >

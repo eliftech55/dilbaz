@@ -8,6 +8,24 @@ import { MascotDialogue } from './DilbazMascot';
 import { playTone, playComboWordTone } from '../utils/soundEffects';
 import { Square, Volume2, Timer, Zap, Mic } from 'lucide-react';
 
+interface WordBurstEffect {
+  id: string;
+  x: number;
+  y: number;
+  points: number;
+  streak: number;
+  delayMs: number;
+}
+
+const SPARKLE_PARTICLES = [
+  { tx: '-34px', ty: '-26px', rot: '-35deg', color: '#FFBE0B', size: 13 },
+  { tx: '34px', ty: '-24px', rot: '35deg', color: '#00F5D4', size: 13 },
+  { tx: '-20px', ty: '-40px', rot: '-18deg', color: '#06D6A0', size: 10 },
+  { tx: '22px', ty: '-42px', rot: '22deg', color: '#FF006E', size: 10 },
+  { tx: '-42px', ty: '4px', rot: '-55deg', color: '#3A86FF', size: 9 },
+  { tx: '42px', ty: '2px', rot: '50deg', color: '#FFBE0B', size: 9 }
+];
+
 interface GameArenaProps {
   tekerleme: Tekerleme;
   currentRound: number;
@@ -37,6 +55,10 @@ export const GameArena: React.FC<GameArenaProps> = ({
   const [audioLevel, setAudioLevel] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
   const [mascotMessage, setMascotMessage] = useState<string>('');
+  const [wordBursts, setWordBursts] = useState<WordBurstEffect[]>([]);
+  const [justMatchedIndices, setJustMatchedIndices] = useState<number[]>([]);
+  const [liveWordScore, setLiveWordScore] = useState(0);
+  const [scorePopKey, setScorePopKey] = useState(0);
 
   const speechEngineRef = useRef<SpeechEngine | null>(null);
   const timerIntervalRef = useRef<any>(null);
@@ -45,6 +67,15 @@ export const GameArena: React.FC<GameArenaProps> = ({
   const hasSubmittedRef = useRef<boolean>(false);
   const prevCorrectCountRef = useRef<number>(0);
   const streakPlayedRef = useRef<boolean>(false);
+  const arenaCardWrapperRef = useRef<HTMLDivElement | null>(null);
+  const celebratedIndicesRef = useRef<Set<number>>(new Set());
+  const comboStreakRef = useRef<number>(0);
+  const effectTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const clearEffectTimers = () => {
+    effectTimersRef.current.forEach((t) => clearTimeout(t));
+    effectTimersRef.current = [];
+  };
 
   // Primitive dependencies prevent Firestore snapshot updates from resetting the active countdown
   useEffect(() => {
@@ -52,6 +83,13 @@ export const GameArena: React.FC<GameArenaProps> = ({
     transcriptRef.current = '';
     prevCorrectCountRef.current = 0;
     streakPlayedRef.current = false;
+    celebratedIndicesRef.current.clear();
+    comboStreakRef.current = 0;
+    clearEffectTimers();
+    setWordBursts([]);
+    setJustMatchedIndices([]);
+    setLiveWordScore(0);
+    setScorePopKey(0);
     setSpokenTranscript('');
     setMicError(null);
     setPhase('countdown');
@@ -78,6 +116,7 @@ export const GameArena: React.FC<GameArenaProps> = ({
 
     return () => {
       clearInterval(interval);
+      clearEffectTimers();
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
@@ -95,6 +134,13 @@ export const GameArena: React.FC<GameArenaProps> = ({
     transcriptRef.current = '';
     prevCorrectCountRef.current = 0;
     streakPlayedRef.current = false;
+    celebratedIndicesRef.current.clear();
+    comboStreakRef.current = 0;
+    clearEffectTimers();
+    setWordBursts([]);
+    setJustMatchedIndices([]);
+    setLiveWordScore(0);
+    setScorePopKey(0);
     setSpokenTranscript('');
     setMicError(null);
 
@@ -248,9 +294,79 @@ export const GameArena: React.FC<GameArenaProps> = ({
     spokenTranscript
   );
 
-  // Interactive competitive sounds as words are matched live
+  // Interactive competitive sounds & sparkle/score bursts as words are matched live
   useEffect(() => {
     if (phase !== 'playing') return;
+
+    const newlyCorrect = wordsForDisplay
+      .map((w, idx) => ({ w, idx }))
+      .filter(({ w, idx }) => w.status === 'correct' && !celebratedIndicesRef.current.has(idx));
+
+    if (newlyCorrect.length > 0) {
+      const containerEl = arenaCardWrapperRef.current;
+      const containerRect = containerEl?.getBoundingClientRect();
+      const createdBursts: WordBurstEffect[] = [];
+      const createdIndices: number[] = [];
+      let totalPointsAdded = 0;
+
+      newlyCorrect.forEach(({ idx }, i) => {
+        celebratedIndicesRef.current.add(idx);
+        createdIndices.push(idx);
+
+        if (idx === 0 || wordsForDisplay[idx - 1]?.status === 'correct') {
+          comboStreakRef.current += 1;
+        } else {
+          comboStreakRef.current = 1;
+        }
+
+        const currentStreak = comboStreakRef.current;
+        const wordPoints = currentStreak >= 5 ? 20 : currentStreak >= 3 ? 15 : 10;
+        totalPointsAdded += wordPoints;
+
+        let x = containerRect ? containerRect.width / 2 : 160;
+        let y = 52;
+
+        if (containerEl && containerRect) {
+          const wordEl = containerEl.querySelector(
+            `[data-word-index="${idx}"]`
+          ) as HTMLElement | null;
+          if (wordEl) {
+            const wRect = wordEl.getBoundingClientRect();
+            x = Math.max(32, Math.min(containerRect.width - 32, wRect.left - containerRect.left + wRect.width / 2));
+            y = Math.max(12, wRect.top - containerRect.top);
+          }
+        }
+
+        createdBursts.push({
+          id: `${currentRound}_${idx}_${Date.now()}_${i}`,
+          x,
+          y,
+          points: wordPoints,
+          streak: currentStreak,
+          delayMs: i * 55
+        });
+      });
+
+      setLiveWordScore((prev) => prev + totalPointsAdded);
+      setScorePopKey((prev) => prev + 1);
+      setWordBursts((prev) => [...prev.slice(-14), ...createdBursts]);
+      setJustMatchedIndices((prev) => Array.from(new Set([...prev, ...createdIndices])));
+
+      const burstIds = new Set(createdBursts.map((b) => b.id));
+      const matchedSet = new Set(createdIndices);
+      const maxDelay = (createdBursts.length - 1) * 55;
+
+      const burstCleanupTimer = setTimeout(() => {
+        setWordBursts((prev) => prev.filter((b) => !burstIds.has(b.id)));
+      }, 940 + maxDelay);
+
+      const glowCleanupTimer = setTimeout(() => {
+        setJustMatchedIndices((prev) => prev.filter((idx) => !matchedSet.has(idx)));
+      }, 480 + maxDelay);
+
+      effectTimersRef.current.push(burstCleanupTimer, glowCleanupTimer);
+    }
+
     const correctCount = wordsForDisplay.filter((w) => w.status === 'correct').length;
     if (correctCount > prevCorrectCountRef.current) {
       playComboWordTone(correctCount);
@@ -258,9 +374,10 @@ export const GameArena: React.FC<GameArenaProps> = ({
     }
     if (liveAccuracy >= 80 && !streakPlayedRef.current) {
       streakPlayedRef.current = true;
-      setTimeout(() => playTone('combo_streak'), 110);
+      const streakTimer = setTimeout(() => playTone('combo_streak'), 110);
+      effectTimersRef.current.push(streakTimer);
     }
-  }, [wordsForDisplay, liveAccuracy, phase]);
+  }, [wordsForDisplay, liveAccuracy, phase, currentRound]);
 
   // COUNTDOWN OVERLAY
   if (phase === 'countdown') {
@@ -300,16 +417,26 @@ export const GameArena: React.FC<GameArenaProps> = ({
     <div className="max-w-2xl mx-auto space-y-4 animate-screen-in">
       {/* Ebru Progress Track + Altın Zümrüdüanka Tüyü */}
       <div className="p-4 ebru-glass-card rounded-[24px] space-y-2.5">
-        <div className="flex items-center justify-between text-xs font-semibold">
-          <span className="inline-flex items-center gap-1.5 text-[#00F5D4] font-display tracking-wide">
+        <div className="flex items-center justify-between gap-2 text-xs font-semibold">
+          <span className="inline-flex items-center gap-1.5 text-[#00F5D4] font-display tracking-wide truncate">
             <span>✦ Tur {currentRound} / {totalRounds}: {tekerleme.title}</span>
           </span>
 
-          <div className="flex items-center gap-2 font-mono">
-            <Timer className={`w-4 h-4 ${timeLeft <= 5 ? 'text-[#FF006E] animate-pulse' : 'text-[#FFBE0B]'}`} />
-            <span className={`font-bold text-base tabular-nums ${timeLeft <= 5 ? 'text-[#FF006E]' : 'text-white'}`}>
-              {timeLeft}s
-            </span>
+          <div className="flex items-center gap-3 font-mono shrink-0">
+            {liveWordScore > 0 && (
+              <span
+                key={scorePopKey}
+                className="text-[#FFBE0B] font-bold text-xs sm:text-sm tabular-nums animate-score-tick"
+              >
+                +{liveWordScore} Puan
+              </span>
+            )}
+            <div className="flex items-center gap-1.5">
+              <Timer className={`w-4 h-4 ${timeLeft <= 5 ? 'text-[#FF006E] animate-pulse' : 'text-[#FFBE0B]'}`} />
+              <span className={`font-bold text-base tabular-nums ${timeLeft <= 5 ? 'text-[#FF006E]' : 'text-white'}`}>
+                {timeLeft}s
+              </span>
+            </div>
           </div>
         </div>
 
@@ -367,14 +494,74 @@ export const GameArena: React.FC<GameArenaProps> = ({
         </button>
       </div>
 
-      {/* Main Cloud-Light Rumi Tekerleme Card */}
-      <WordComparison
-        originalWords={wordsForDisplay}
-        spokenTranscript={spokenTranscript}
-        isListening={isListening}
-        liveAccuracy={liveAccuracy}
-        categoryLabel={tekerleme.categoryLabel || 'Tekerleme Arenası'}
-      />
+      {/* Main Cloud-Light Rumi Tekerleme Card with Per-Word Sparkle & Score Overlay */}
+      <div ref={arenaCardWrapperRef} className="relative">
+        <WordComparison
+          originalWords={wordsForDisplay}
+          spokenTranscript={spokenTranscript}
+          isListening={isListening}
+          liveAccuracy={liveAccuracy}
+          categoryLabel={tekerleme.categoryLabel || 'Tekerleme Arenası'}
+          justMatchedIndices={justMatchedIndices}
+        />
+
+        {/* Floating Sparkle Bursts & Score Popups */}
+        <div
+          className="pointer-events-none absolute inset-0 overflow-visible z-30"
+          aria-hidden="true"
+        >
+          {wordBursts.map((burst) => {
+            const isHotStreak = burst.streak >= 3;
+            return (
+              <div
+                key={burst.id}
+                className="absolute"
+                style={{ left: `${burst.x}px`, top: `${burst.y}px` }}
+              >
+                {SPARKLE_PARTICLES.map((particle, pIdx) => (
+                  <svg
+                    key={pIdx}
+                    width={particle.size}
+                    height={particle.size}
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className="absolute left-0 top-0 animate-sparkle-particle"
+                    style={
+                      {
+                        '--tx': particle.tx,
+                        '--ty': particle.ty,
+                        '--rot': particle.rot,
+                        animationDelay: `${burst.delayMs}ms`
+                      } as React.CSSProperties
+                    }
+                  >
+                    <path
+                      d="M8 0L9.9 6.1L16 8L9.9 9.9L8 16L6.1 9.9L0 8L6.1 6.1L8 0Z"
+                      fill={particle.color}
+                    />
+                  </svg>
+                ))}
+
+                <div
+                  className={`absolute left-0 top-0 -translate-x-1/2 whitespace-nowrap rounded-lg px-2 py-0.5 text-xs sm:text-sm font-display font-bold tabular-nums animate-float-score ${
+                    isHotStreak
+                      ? 'bg-[#0d1629]/95 text-[#FFBE0B] border border-[#FFBE0B]/70 shadow-[0_6px_16px_rgba(255,190,11,0.38)]'
+                      : 'bg-[#0d1629]/92 text-[#00F5D4] border border-[#00F5D4]/55 shadow-[0_6px_14px_rgba(13,22,41,0.35)]'
+                  }`}
+                  style={{ animationDelay: `${burst.delayMs}ms` }}
+                >
+                  +{burst.points}
+                  {isHotStreak && (
+                    <span className="ml-1 text-[10px] text-[#06D6A0]">
+                      ✦ {burst.streak}x
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Live Ebru Audio Visualizer */}
       <AudioVisualizer isListening={isListening} audioLevel={audioLevel} />
