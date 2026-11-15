@@ -195,10 +195,14 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
     }
   };
 
+  const isActiveInviteableRoom = Boolean(
+    activeRoom && activeRoom.status !== 'closed' && activeRoom.status !== 'game_over'
+  );
+
   const handleInviteOrCreate = async (friendUid: string, friendName: string) => {
     setBusyIds((prev) => ({ ...prev, [friendUid]: true }));
     try {
-      if (activeRoom && activeRoom.status === 'waiting') {
+      if (isActiveInviteableRoom) {
         await onInviteFriendToActiveRoom(friendUid);
       } else {
         await onCreateRoomAndInvite(friendUid, friendName);
@@ -532,7 +536,7 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
             <Users className="w-5 h-5 text-[#06D6A0]" />
             <span>Arkadaşlarım ({acceptedFriends.length})</span>
           </h2>
-          {activeRoom && activeRoom.status === 'waiting' && (
+          {isActiveInviteableRoom && activeRoom && (
             <span className="text-[11px] px-2.5 py-1 rounded-full bg-[#3A86FF]/20 text-[#93C5FD] border border-[#3A86FF]/40 font-mono">
               Aktif Oda: {activeRoom.code}
             </span>
@@ -647,10 +651,10 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
                         {busy
                           ? 'Gönderiliyor...'
                           : wasDeclined || isInvitedNow
-                          ? activeRoom && activeRoom.status === 'waiting'
+                          ? isActiveInviteableRoom
                             ? 'Tekrar Davet Et'
                             : 'Yeni Oda Kur & Tekrar Davet Et'
-                          : activeRoom && activeRoom.status === 'waiting'
+                          : isActiveInviteableRoom
                           ? 'Aktif Odaya Davet Et'
                           : 'Oda Kur & Davet Et'}
                       </span>

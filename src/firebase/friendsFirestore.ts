@@ -7,9 +7,11 @@ import {
   collection,
   query,
   where,
-  onSnapshot
+  onSnapshot,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
-import { db } from './config';
+import { db, auth } from './config';
 import {
   EmailDirectoryEntry,
   Friendship,
@@ -357,22 +359,26 @@ export async function sendRoomInviteToFriend(params: {
         status: 'pending',
         updatedAt: now
       });
-      return;
+    } else {
+      const payload: RoomInvite = {
+        id: inviteId,
+        roomCode: params.roomCode,
+        roomTitle: params.roomTitle.trim().slice(0, 120) || `Oda ${params.roomCode}`,
+        senderUid: params.senderUid,
+        senderName: params.senderName.trim().slice(0, 80) || 'Üye',
+        senderAvatar: params.senderAvatar || 'elibelinde',
+        recipientUid: params.recipientUid,
+        status: 'pending',
+        createdAt: now,
+        updatedAt: now
+      };
+      await setDoc(ref, payload);
     }
 
-    const payload: RoomInvite = {
-      id: inviteId,
-      roomCode: params.roomCode,
-      roomTitle: params.roomTitle.trim().slice(0, 120) || `Oda ${params.roomCode}`,
-      senderUid: params.senderUid,
-      senderName: params.senderName.trim().slice(0, 80) || 'Üye',
-      senderAvatar: params.senderAvatar || 'elibelinde',
-      recipientUid: params.recipientUid,
-      status: 'pending',
-      createdAt: now,
+    await updateDoc(doc(db, 'rooms', params.roomCode), {
+      invitedUids: arrayUnion(params.recipientUid),
       updatedAt: now
-    };
-    await setDoc(ref, payload);
+    }).catch(() => undefined);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -398,7 +404,8 @@ export function subscribeToMyRoomInvites(
 
 export async function respondToRoomInvite(
   inviteId: string,
-  status: 'accepted' | 'dismissed'
+  status: 'accepted' | 'dismissed',
+  roomCode?: string
 ): Promise<void> {
   const path = `roomInvites/${inviteId}`;
   try {
@@ -406,6 +413,11 @@ export async function respondToRoomInvite(
       status,
       updatedAt: Date.now()
     });
+    if (status === 'dismissed' && roomCode && auth.currentUser?.uid) {
+      await updateDoc(doc(db, 'rooms', roomCode.trim().toUpperCase()), {
+        invitedUids: arrayRemove(auth.currentUser.uid)
+      }).catch(() => undefined);
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
   }

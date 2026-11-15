@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { Room, Difficulty, PhonemeCategory, UserProfile, RoomInvite, RoomProgressionMode } from '../types/game';
+import { Room, Difficulty, PhonemeCategory, UserProfile, RoomInvite, RoomProgressionMode, RoomJoinMethod } from '../types/game';
 import { MascotDialogue } from './DilbazMascot';
 import { KILIM_MOTIFS, KilimAvatar, getKilimMotif } from './KilimAvatar';
 import { AppTab } from './Navbar';
@@ -60,7 +60,7 @@ interface RoomLobbyProps {
     creatorName: string;
     creatorAvatar: string;
   }) => void;
-  onJoinRoom: (code: string, playerName: string, avatar: string) => void;
+  onJoinRoom: (code: string, playerName: string, avatar: string, method?: RoomJoinMethod) => void;
   onStartGame: () => void;
   onAddBotPlayer: () => void;
   onToggleReady: () => void;
@@ -122,6 +122,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [activeRoomPinInput, setActiveRoomPinInput] = useState('');
   const [invitedFriendUids, setInvitedFriendUids] = useState<Record<string, boolean>>({});
   const [invitingFriendUid, setInvitingFriendUid] = useState<string | null>(null);
 
@@ -525,6 +526,10 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
             </div>
             {rejoinableRooms.slice(0, 2).map((r) => {
               const isMyCreatedRoom = (r.originalHostId || r.hostId) === currentUser.id;
+              const isParticipantRoom =
+                !isMyCreatedRoom &&
+                Array.isArray(r.participantIds) &&
+                r.participantIds.includes(currentUser.id);
               const statusLabel =
                 r.status === 'waiting'
                   ? 'Lobide Bekliyor'
@@ -541,9 +546,17 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                     <div className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
                       <span className="truncate">{r.title}</span>
                       <span className="font-mono text-[#FFBE0B]">{r.code}</span>
-                      {isMyCreatedRoom && (
+                      {isMyCreatedRoom ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FFBE0B]/20 text-[#FFBE0B] font-bold">
                           Kurucu
+                        </span>
+                      ) : isParticipantRoom ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#3A86FF]/20 text-[#93C5FD] font-bold">
+                          Katılımcı
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#06D6A0]/20 text-[#06D6A0] font-bold">
+                          Davet Edildin
                         </span>
                       )}
                     </div>
@@ -564,12 +577,17 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                     disabled={isLoading}
                     onClick={() => {
                       playTone('tap');
-                      onJoinRoom(r.code, playerName.trim() || activeMotif.name, selectedAvatar);
+                      onJoinRoom(
+                        r.code,
+                        playerName.trim() || activeMotif.name,
+                        selectedAvatar,
+                        'active_list'
+                      );
                     }}
                     className="px-4 py-2 rounded-xl btn-epic-turquoise text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-50"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Oyuna Devam Et</span>
+                    <span>{r.status === 'waiting' ? 'Odaya Katıl' : 'Oyuna Devam Et'}</span>
                   </button>
                 </div>
               );
@@ -619,7 +637,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                     Odaya Katıl (Öğrenci / Yarışmacı)
                   </div>
                   <div className="text-xs text-[#CBD5E1] mt-0.5">
-                    PIN kodunu girerek canlı yarışma masasına oturun.
+                    PIN kodunu biliyorsan beklemedeki veya devam eden aktif odaya katıl.
                   </div>
                 </div>
                 <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#3A86FF]/25 text-[#93C5FD] border border-[#3A86FF]/45 shrink-0">
@@ -643,7 +661,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                     Aktif Odalar (Oyuna Devam Et)
                   </div>
                   <div className="text-xs text-[#CBD5E1] mt-0.5">
-                    Çıktığın veya yarım kalan aktif odalara kaldığın puandan tekrar katıl.
+                    Yalnızca kurduğun, davet edildiğin veya katıldığın aktif odalar listelenir; diğerleri için PIN gir.
                   </div>
                 </div>
                 <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#FFBE0B]/20 text-[#FFBE0B] border border-[#FFBE0B]/45 shrink-0">
@@ -804,13 +822,13 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
           </div>
         )}
 
-        {/* ACTIVE ROOMS LIST */}
+        {/* ACTIVE ROOMS LIST (Strictly scoped to created, invited, or joined rooms + PIN entry) */}
         {viewMode === 'active_rooms' && (
           <div className="p-6 ebru-glass-card rounded-[28px] space-y-4 animate-screen-in">
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
               <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
                 <RotateCcw className="w-5 h-5 text-[#00F5D4]" />
-                <span>Aktif Odalar ({rejoinableRooms.length})</span>
+                <span>Aktif Odalarım ({rejoinableRooms.length})</span>
               </h2>
               <button
                 type="button"
@@ -824,10 +842,14 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
               </button>
             </div>
 
+            <div className="p-3 rounded-2xl bg-[#3A86FF]/12 border border-[#3A86FF]/35 text-[11.5px] text-[#CBD5E1] leading-relaxed">
+              Güvenlik ve gizlilik için yalnızca <strong className="text-white">kurduğun</strong>, <strong className="text-white">davet edildiğin</strong> veya <strong className="text-white">daha önce katıldığın</strong> aktif odalar görünür. Başka bir aktif odaya sonradan katılmak için oda PIN kodunu girin.
+            </div>
+
             {rejoinableRooms.length === 0 ? (
-              <div className="p-6 rounded-2xl bg-[#0d1629]/75 border border-white/10 text-center space-y-3">
+              <div className="p-5 rounded-2xl bg-[#0d1629]/75 border border-white/10 text-center space-y-3">
                 <p className="text-xs text-[#CBD5E1]">
-                  Şu an katılabileceğin devam eden veya yarım kalmış bir oda bulunmuyor.
+                  Şu an kurduğun, davet edildiğin veya devam ettiğin aktif bir oda bulunmuyor.
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">
                   <button
@@ -840,22 +862,16 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                   >
                     Yeni Oda Kur
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playTone('tap');
-                      setViewMode('join');
-                    }}
-                    className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-white cursor-pointer"
-                  >
-                    PIN ile Katıl
-                  </button>
                 </div>
               </div>
             ) : (
               <div className="space-y-3">
                 {rejoinableRooms.map((r) => {
                   const isOriginalCreator = (r.originalHostId || r.hostId) === currentUser.id;
+                  const isParticipantRoom =
+                    !isOriginalCreator &&
+                    Array.isArray(r.participantIds) &&
+                    r.participantIds.includes(currentUser.id);
                   const statusLabel =
                     r.status === 'waiting'
                       ? 'Lobide Bekliyor'
@@ -874,9 +890,17 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                           <span className="text-xs font-mono font-bold text-[#FFBE0B] px-2 py-0.5 rounded bg-[#FFBE0B]/15">
                             {r.code}
                           </span>
-                          {isOriginalCreator && (
+                          {isOriginalCreator ? (
                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#FFBE0B]/20 text-[#FFBE0B] border border-[#FFBE0B]/40 font-bold">
                               Oda Kurucususun
+                            </span>
+                          ) : isParticipantRoom ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#3A86FF]/20 text-[#93C5FD] border border-[#3A86FF]/40 font-bold">
+                              Katılımcı
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#06D6A0]/20 text-[#06D6A0] border border-[#06D6A0]/40 font-bold">
+                              Davet Edildin
                             </span>
                           )}
                         </div>
@@ -898,18 +922,59 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                         disabled={isLoading}
                         onClick={() => {
                           playTone('tap');
-                          onJoinRoom(r.code, playerName.trim() || activeMotif.name, selectedAvatar);
+                          onJoinRoom(
+                            r.code,
+                            playerName.trim() || activeMotif.name,
+                            selectedAvatar,
+                            'active_list'
+                          );
                         }}
                         className="px-4 py-2.5 rounded-xl btn-epic-turquoise text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-50"
                       >
                         <Play className="w-3.5 h-3.5 fill-current" />
-                        <span>{r.status === 'waiting' ? 'Lobiye Dön' : 'Oyuna Devam Et'}</span>
+                        <span>{r.status === 'waiting' ? 'Odaya Katıl' : 'Oyuna Devam Et'}</span>
                       </button>
                     </div>
                   );
                 })}
               </div>
             )}
+
+            {/* Direct PIN entry inside Aktif Odalar */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!activeRoomPinInput.trim() || isLoading) return;
+                playTone('tap');
+                onJoinRoom(
+                  activeRoomPinInput.trim(),
+                  playerName.trim() || activeMotif.name,
+                  selectedAvatar,
+                  'pin'
+                );
+              }}
+              className="pt-3 border-t border-white/10 space-y-2.5"
+            >
+              <label className="text-xs font-bold text-[#FFBE0B] block">
+                PIN Kodu ile Başka Bir Aktif Odaya Gir
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={activeRoomPinInput}
+                  onChange={(e) => setActiveRoomPinInput(e.target.value.toUpperCase())}
+                  placeholder="Oda PIN Kodu (Örn: DLBZ-4821)"
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-[#0d1629]/90 border border-[#3A86FF]/40 text-[#FFBE0B] font-mono font-bold text-sm uppercase tracking-widest focus:border-[#00F5D4] focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={isLoading || !activeRoomPinInput.trim()}
+                  className="px-5 py-2.5 rounded-xl btn-epic-turquoise text-xs font-bold cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  {isLoading ? 'Bağlanılıyor...' : 'PIN ile Gir'}
+                </button>
+              </div>
+            </form>
           </div>
         )}
 
@@ -949,7 +1014,12 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
               onClick={() => {
                 if (!joinCode.trim()) return;
                 playTone('tap');
-                onJoinRoom(joinCode.trim(), playerName.trim() || activeMotif.name, selectedAvatar);
+                onJoinRoom(
+                  joinCode.trim(),
+                  playerName.trim() || activeMotif.name,
+                  selectedAvatar,
+                  'pin'
+                );
               }}
               disabled={isLoading || !joinCode.trim()}
               className="w-full py-4 rounded-[20px] btn-epic-turquoise font-bold text-sm tracking-wide cursor-pointer disabled:opacity-50"

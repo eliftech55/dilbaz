@@ -57,6 +57,10 @@
           "type": "array",
           "description": "IDs of human participants who joined or created this room for active room rejoining"
         },
+        "invitedUids": {
+          "type": "array",
+          "description": "UIDs of registered users invited to this room"
+        },
         "roundScores": {
           "type": "object",
           "description": "Map of round number to submitted player scores"

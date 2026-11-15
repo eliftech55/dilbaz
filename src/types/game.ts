@@ -83,6 +83,8 @@ export type RoomStatus = 'waiting' | 'countdown' | 'in_round' | 'round_result' |
 
 export type RoomProgressionMode = 'host' | 'auto';
 
+export type RoomJoinMethod = 'pin' | 'invite' | 'active_list';
+
 export interface RoomSettings {
   roundCount: number;
   timeLimitSeconds: number;
@@ -105,6 +107,7 @@ export interface Room {
   currentTekerleme?: Tekerleme;
   winnerId?: string;
   participantIds?: string[];
+  invitedUids?: string[];
   updatedAt?: number;
   players: {
     id: string;

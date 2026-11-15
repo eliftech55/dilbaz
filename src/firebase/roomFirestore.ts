@@ -9,7 +9,7 @@ import {
   where,
   runTransaction
 } from 'firebase/firestore';
-import { db } from './config';
+import { db, auth } from './config';
 import {
   Room,
   RoomStatus,
@@ -17,10 +17,37 @@ import {
   PlayerScore,
   Difficulty,
   PhonemeCategory,
-  RoomProgressionMode
+  RoomProgressionMode,
+  RoomJoinMethod
 } from '../types/game';
 import { INITIAL_TEKERLEMELER } from '../data/tekerlemeler';
 import { generateBotScore } from '../utils/scoreCalculator';
+
+function getGuestKnownRoomCodes(playerId: string): string[] {
+  if (typeof window === 'undefined' || !playerId) return [];
+  try {
+    const raw = localStorage.getItem(`dilbaz_guest_rooms_${playerId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((c): c is string => typeof c === 'string' && c.length > 0).slice(0, 15)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function recordGuestKnownRoomCode(playerId: string, code: string): void {
+  if (typeof window === 'undefined' || !playerId || !code) return;
+  try {
+    const normalized = code.trim().toUpperCase();
+    const current = getGuestKnownRoomCodes(playerId);
+    const updated = [normalized, ...current.filter((c) => c !== normalized)].slice(0, 15);
+    localStorage.setItem(`dilbaz_guest_rooms_${playerId}`, JSON.stringify(updated));
+  } catch {
+    // ignore storage limits
+  }
+}
 
 /**
  * Deep cleans an object before writing to Firestore.
@@ -101,6 +128,7 @@ export class RoomFirestore {
         progressionMode
       },
       participantIds: [params.hostId],
+      invitedUids: [],
       updatedAt: now,
       players: [
         {
@@ -117,20 +145,25 @@ export class RoomFirestore {
 
     const cleanPayload = deepCleanForFirestore(newRoom);
     await setDoc(roomRef, cleanPayload);
+    if (!auth.currentUser) {
+      recordGuestKnownRoomCode(params.hostId, code);
+    }
     return newRoom;
   }
 
   /**
-   * Join an existing room via PIN code (supports mid-game rejoin for players & original host)
+   * Join an existing room via PIN, invite, or active_list (enforces invite/PIN/creator/participant access)
    */
   public static async joinRoom(
     code: string,
-    player: { id: string; name: string; avatar: string }
+    player: { id: string; name: string; avatar: string },
+    options?: { method?: RoomJoinMethod }
   ): Promise<Room> {
     const normalizedCode = code.trim().toUpperCase();
     const roomRef = doc(db, 'rooms', normalizedCode);
+    const method: RoomJoinMethod = options?.method || 'pin';
 
-    return runTransaction(db, async (tx) => {
+    const joined = await runTransaction(db, async (tx) => {
       const snap = await tx.get(roomRef);
 
       if (!snap.exists()) {
@@ -168,15 +201,65 @@ export class RoomFirestore {
             (scores) => Array.isArray(scores) && scores.some((s) => s.playerId === player.id)
           )
       );
-      const canRejoinMidGame =
-        existingIndex >= 0 || Boolean(departedInfo) || hasRoundHistory || isOriginalHost;
+      const isParticipant =
+        Array.isArray(roomData.participantIds) && roomData.participantIds.includes(player.id);
+
+      let isInvited =
+        Array.isArray(roomData.invitedUids) && roomData.invitedUids.includes(player.id);
+
+      // Verify live roomInvites status for signed-in users before any writes
+      if (auth.currentUser && auth.currentUser.uid === player.id && method !== 'pin') {
+        try {
+          const inviteSnap = await tx.get(
+            doc(db, 'roomInvites', `${normalizedCode}_${player.id}`)
+          );
+          if (inviteSnap.exists()) {
+            const invStatus = inviteSnap.data()?.status;
+            if (invStatus === 'dismissed') {
+              isInvited = false;
+            } else if (invStatus === 'pending' || invStatus === 'accepted') {
+              isInvited = true;
+            }
+          }
+        } catch {
+          // ignore if invite document check fails and fall back to invitedUids
+        }
+      }
+
+      const hasPriorOrHostAccess =
+        existingIndex >= 0 ||
+        Boolean(departedInfo) ||
+        hasRoundHistory ||
+        isOriginalHost ||
+        isParticipant;
+
+      const hasPinAccess = method === 'pin' && normalizedCode === roomData.code;
 
       if (roomData.status === 'game_over' && existingIndex < 0) {
         throw new Error('Bu odadaki oyun sona erdi.');
       }
 
-      if (roomData.status !== 'waiting' && !canRejoinMidGame) {
-        throw new Error('Bu odada yarışma başladı. Lobiye yeni katılımcı kabul edilmiyor.');
+      if (method === 'active_list' && !hasPriorOrHostAccess && !isInvited) {
+        throw new Error(
+          'Bu aktif odaya erişim yetkiniz yok. Yalnızca kurduğunuz, davet edildiğiniz veya PIN kodunu girdiğiniz odalara katılabilirsiniz.'
+        );
+      }
+
+      if (method === 'invite' && !hasPriorOrHostAccess && !isInvited) {
+        throw new Error(
+          'Bu oda için geçerli bir davetiniz bulunmuyor. Oda PIN kodunu biliyorsanız PIN ile katılabilirsiniz.'
+        );
+      }
+
+      if (
+        roomData.status !== 'waiting' &&
+        !hasPriorOrHostAccess &&
+        !isInvited &&
+        !hasPinAccess
+      ) {
+        throw new Error(
+          'Aktif odaya sonradan katılmak için davet edilmiş olmanız veya oda PIN kodunu girmeniz gerekir.'
+        );
       }
 
       if (existingIndex >= 0) {
@@ -268,46 +351,149 @@ export class RoomFirestore {
         updatedAt: now
       };
     });
+
+    if (!auth.currentUser) {
+      recordGuestKnownRoomCode(player.id, normalizedCode);
+    }
+
+    return joined;
   }
 
   /**
-   * Subscribe to active rooms where the player (or host) is a participant so they can rejoin anytime
+   * Subscribe ONLY to active rooms where the player (or host) is a participant.
+   * Unauthenticated guests track only rooms they created/joined via PIN locally using document get.
    */
   public static subscribeToActiveRooms(
     playerId: string,
     onUpdate: (rooms: Room[]) => void,
-    onError?: (error: any) => void
+    onError?: (error: any) => void,
+    isAuthenticated: boolean = false
   ): () => void {
     if (!playerId) {
       onUpdate([]);
       return () => undefined;
     }
 
-    const q = query(
-      collection(db, 'rooms'),
-      where('participantIds', 'array-contains', playerId)
+    const maxAgeCutoff = () => Date.now() - 12 * 60 * 60 * 1000;
+
+    if (isAuthenticated && auth.currentUser?.uid === playerId) {
+      const q = query(
+        collection(db, 'rooms'),
+        where('participantIds', 'array-contains', playerId)
+      );
+
+      return onSnapshot(
+        q,
+        (snap) => {
+          const cutoff = maxAgeCutoff();
+          const active = snap.docs
+            .map((d) => d.data() as Room)
+            .filter(
+              (r) =>
+                r.status !== 'closed' &&
+                r.status !== 'game_over' &&
+                (!r.updatedAt || r.updatedAt >= cutoff)
+            )
+            .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+          onUpdate(active);
+        },
+        (err) => {
+          console.warn('Active rooms listener warning:', err);
+          onError?.(err);
+        }
+      );
+    }
+
+    const knownCodes = getGuestKnownRoomCodes(playerId);
+    if (knownCodes.length === 0) {
+      onUpdate([]);
+      return () => undefined;
+    }
+
+    const roomMap: Record<string, Room | null> = {};
+    const emit = () => {
+      const cutoff = maxAgeCutoff();
+      const list = Object.values(roomMap)
+        .filter((r): r is Room => Boolean(r))
+        .filter(
+          (r) =>
+            r.status !== 'closed' &&
+            r.status !== 'game_over' &&
+            (!r.updatedAt || r.updatedAt >= cutoff) &&
+            (r.originalHostId === playerId ||
+              r.hostId === playerId ||
+              (Array.isArray(r.participantIds) && r.participantIds.includes(playerId)))
+        )
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      onUpdate(list);
+    };
+
+    const unsubs = knownCodes.map((code) =>
+      onSnapshot(
+        doc(db, 'rooms', code),
+        (snap) => {
+          roomMap[code] = snap.exists() ? (snap.data() as Room) : null;
+          emit();
+        },
+        () => {
+          roomMap[code] = null;
+          emit();
+        }
+      )
     );
 
-    return onSnapshot(
-      q,
-      (snap) => {
-        const maxAgeCutoff = Date.now() - 12 * 60 * 60 * 1000;
-        const active = snap.docs
-          .map((d) => d.data() as Room)
-          .filter(
-            (r) =>
-              r.status !== 'closed' &&
-              r.status !== 'game_over' &&
-              (!r.updatedAt || r.updatedAt >= maxAgeCutoff)
-          )
-          .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-        onUpdate(active);
-      },
-      (err) => {
-        console.warn('Active rooms listener warning:', err);
-        onError?.(err);
-      }
+    return () => {
+      unsubs.forEach((u) => u());
+    };
+  }
+
+  /**
+   * Subscribe to specific active rooms by code (e.g. rooms the user has an active invite for)
+   */
+  public static subscribeToRoomsByCodes(
+    codes: string[],
+    onUpdate: (rooms: Room[]) => void
+  ): () => void {
+    const uniqueCodes = Array.from(
+      new Set(codes.map((c) => c.trim().toUpperCase()).filter(Boolean))
     );
+    if (uniqueCodes.length === 0) {
+      onUpdate([]);
+      return () => undefined;
+    }
+
+    const roomMap: Record<string, Room | null> = {};
+    const emit = () => {
+      const cutoff = Date.now() - 12 * 60 * 60 * 1000;
+      const list = Object.values(roomMap)
+        .filter((r): r is Room => Boolean(r))
+        .filter(
+          (r) =>
+            r.status !== 'closed' &&
+            r.status !== 'game_over' &&
+            (!r.updatedAt || r.updatedAt >= cutoff)
+        )
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      onUpdate(list);
+    };
+
+    const unsubs = uniqueCodes.map((code) =>
+      onSnapshot(
+        doc(db, 'rooms', code),
+        (snap) => {
+          roomMap[code] = snap.exists() ? (snap.data() as Room) : null;
+          emit();
+        },
+        () => {
+          roomMap[code] = null;
+          emit();
+        }
+      )
+    );
+
+    return () => {
+      unsubs.forEach((u) => u());
+    };
   }
 
   /**

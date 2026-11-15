@@ -10,7 +10,8 @@ import {
   UserNotification,
   Friendship,
   RoomInvite,
-  RoomProgressionMode
+  RoomProgressionMode,
+  RoomJoinMethod
 } from './types/game';
 import { INITIAL_TEKERLEMELER } from './data/tekerlemeler';
 import { RoomFirestore } from './firebase/roomFirestore';
@@ -531,13 +532,35 @@ export default function App() {
   // Active Multiplayer Room & Active Rejoinable Rooms
   const [room, setRoom] = useState<Room | null>(null);
   const [activeRooms, setActiveRooms] = useState<Room[]>([]);
+  const [invitedActiveRooms, setInvitedActiveRooms] = useState<Room[]>([]);
   const [currentRoundUserScore, setCurrentRoundUserScore] = useState<PlayerScore | null>(null);
   const sseUnsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    const unsub = RoomFirestore.subscribeToActiveRooms(currentUser.id, setActiveRooms);
+    const unsub = RoomFirestore.subscribeToActiveRooms(
+      currentUser.id,
+      setActiveRooms,
+      undefined,
+      Boolean(authUser)
+    );
     return () => unsub();
-  }, [currentUser.id]);
+  }, [currentUser.id, authUser]);
+
+  const activeInviteRoomCodesKey = useMemo(() => {
+    const codes = roomInvites
+      .filter((inv) => inv.status === 'pending' || inv.status === 'accepted')
+      .map((inv) => inv.roomCode.trim().toUpperCase());
+    return Array.from(new Set(codes)).sort().join(',');
+  }, [roomInvites]);
+
+  useEffect(() => {
+    if (!authUser || !activeInviteRoomCodesKey) {
+      setInvitedActiveRooms([]);
+      return;
+    }
+    const codes = activeInviteRoomCodesKey.split(',').filter(Boolean);
+    return RoomFirestore.subscribeToRoomsByCodes(codes, setInvitedActiveRooms);
+  }, [authUser, activeInviteRoomCodesKey]);
 
   // Monitor live status of rooms referenced by pending invites
   useEffect(() => {
@@ -685,7 +708,12 @@ export default function App() {
     }
   };
 
-  const handleJoinRoom = async (code: string, playerName: string, avatar: string) => {
+  const handleJoinRoom = async (
+    code: string,
+    playerName: string,
+    avatar: string,
+    method: RoomJoinMethod = 'pin'
+  ) => {
     setIsLoading(true);
     setRoomError(null);
     try {
@@ -698,11 +726,15 @@ export default function App() {
       sessionStorage.setItem('dilbaz_session_name', playerName);
       sessionStorage.setItem('dilbaz_session_avatar', avatar);
 
-      const joinedRoom = await RoomFirestore.joinRoom(code, {
-        id: currentUser.id,
-        name: playerName,
-        avatar: avatar
-      });
+      const joinedRoom = await RoomFirestore.joinRoom(
+        code,
+        {
+          id: currentUser.id,
+          name: playerName,
+          avatar: avatar
+        },
+        { method }
+      );
 
       setRoom(joinedRoom);
       setCurrentRoundUserScore(null);
@@ -863,13 +895,13 @@ export default function App() {
   };
 
   const handleAcceptRoomInvite = async (invite: RoomInvite) => {
-    await respondToRoomInvite(invite.id, 'accepted').catch(() => undefined);
+    await respondToRoomInvite(invite.id, 'accepted', invite.roomCode).catch(() => undefined);
     setActiveTab('room');
-    await handleJoinRoom(invite.roomCode, currentUser.name, currentUser.avatar);
+    await handleJoinRoom(invite.roomCode, currentUser.name, currentUser.avatar, 'invite');
   };
 
   const handleDismissRoomInvite = async (invite: RoomInvite) => {
-    await respondToRoomInvite(invite.id, 'dismissed').catch(() => undefined);
+    await respondToRoomInvite(invite.id, 'dismissed', invite.roomCode).catch(() => undefined);
   };
 
   const handleInviteFriendToActiveRoom = async (friendUid: string) => {
@@ -932,13 +964,21 @@ export default function App() {
     const { invite } = alertItem;
     setDeclinedInviteAlerts((prev) => prev.filter((a) => a.id !== alertItem.id));
 
-    if (room && room.code === invite.roomCode && room.status === 'waiting') {
+    if (
+      room &&
+      room.code === invite.roomCode &&
+      room.status !== 'closed' &&
+      room.status !== 'game_over'
+    ) {
       await handleInviteFriendToActiveRoom(invite.recipientUid);
       return;
     }
 
     const matchingActive = activeRooms.find(
-      (r) => r.code === invite.roomCode && r.status === 'waiting'
+      (r) =>
+        r.code === invite.roomCode &&
+        r.status !== 'closed' &&
+        r.status !== 'game_over'
     );
     if (matchingActive) {
       await sendRoomInviteToFriend({
@@ -961,7 +1001,7 @@ export default function App() {
       setActiveTab('room');
       if (room?.code !== roomCode) {
         setInitialCodeParam(roomCode.toUpperCase());
-        handleJoinRoom(roomCode, currentUser.name, currentUser.avatar);
+        handleJoinRoom(roomCode, currentUser.name, currentUser.avatar, 'invite');
       }
       return;
     }
@@ -1020,10 +1060,20 @@ export default function App() {
       });
   }, [friendships, authUser]);
 
-  const rejoinableRooms = useMemo(
-    () => activeRooms.filter((r) => r.code !== room?.code),
-    [activeRooms, room?.code]
-  );
+  const rejoinableRooms = useMemo(() => {
+    const byCode = new Map<string, Room>();
+    [...activeRooms, ...invitedActiveRooms].forEach((r) => {
+      if (
+        r.code !== room?.code &&
+        r.status !== 'closed' &&
+        r.status !== 'game_over' &&
+        !byCode.has(r.code)
+      ) {
+        byCode.set(r.code, r);
+      }
+    });
+    return Array.from(byCode.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  }, [activeRooms, invitedActiveRooms, room?.code]);
 
   const roundScoresForCurrentRound: PlayerScore[] =
     room?.roundScores?.[room.currentRound] ||
