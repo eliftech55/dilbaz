@@ -122,6 +122,16 @@ service cloud.firestore {
         && data.updatedAt is number;
     }
 
+    function isValidPushSubscription(data) {
+      return data.keys().hasAll(['id', 'uid', 'endpoint', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'uid', 'endpoint', 'userAgent', 'updatedAt'])
+        && data.id is string && data.id.size() >= 3 && data.id.size() <= 128
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.endpoint is string && data.endpoint.size() >= 10 && data.endpoint.size() <= 1024
+        && (!('userAgent' in data) || (data.userAgent is string && data.userAgent.size() <= 200))
+        && data.updatedAt is number;
+    }
+
     // Default deny safety net
     match /{document=**} {
       allow read, write: if false;
@@ -372,6 +382,23 @@ service cloud.firestore {
           )
         );
       allow delete: if isSignedIn() && isValidId(inviteId) && (existing().recipientUid == request.auth.uid || existing().senderUid == request.auth.uid || isAdmin());
+    }
+
+    // Owner-only Web Push device registration metadata
+    match /pushSubscriptions/{subId} {
+      allow get: if isSignedIn() && isValidId(subId) && (resource == null || existing().uid == request.auth.uid);
+      allow list: if isSignedIn() && existing().uid == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(subId)
+        && isValidPushSubscription(incoming())
+        && incoming().id == subId
+        && incoming().uid == request.auth.uid;
+      allow update: if isSignedIn()
+        && isValidId(subId)
+        && isValidPushSubscription(incoming())
+        && existing().uid == request.auth.uid
+        && incoming().uid == existing().uid;
+      allow delete: if isSignedIn() && isValidId(subId) && existing().uid == request.auth.uid;
     }
   }
 }

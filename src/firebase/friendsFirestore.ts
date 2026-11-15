@@ -19,6 +19,16 @@ import {
   RoomStatus
 } from '../types/game';
 import { OperationType, handleFirestoreError } from './errorHandler';
+import { triggerRemotePushNotification } from '../utils/mobileNotifications';
+
+async function getCurrentUserIdToken(): Promise<string> {
+  try {
+    if (!auth.currentUser) return '';
+    return await auth.currentUser.getIdToken();
+  } catch {
+    return '';
+  }
+}
 
 export interface InvitedRoomStatusInfo {
   exists: boolean;
@@ -290,6 +300,19 @@ export async function sendFriendRequestByEmail(params: {
     };
 
     await setDoc(ref, payload);
+
+    void getCurrentUserIdToken().then((idToken) => {
+      if (!idToken) return;
+      return triggerRemotePushNotification({
+        recipientUid: target.uid,
+        title: 'Yeni Arkadaşlık Teklifi! 🤝',
+        body: `${payload.requesterName} seninle Dilbaz kelime düelloları yapmak için arkadaşlık teklif etti.`,
+        tag: `friend_${friendshipId}`,
+        tab: 'friends',
+        idToken
+      });
+    });
+
     return target;
   } catch (error) {
     if (error instanceof Error && !error.message.includes('Firebase') && !error.message.includes('permission')) {
@@ -387,6 +410,21 @@ export async function sendRoomInviteToFriend(params: {
       invitedUids: arrayUnion(params.recipientUid),
       updatedAt: now
     }).catch(() => undefined);
+
+    const dateStr = formatInviteDateTime(now);
+    const senderLabel = params.senderName.trim().slice(0, 80) || 'Arkadaşın';
+    void getCurrentUserIdToken().then((idToken) => {
+      if (!idToken) return;
+      return triggerRemotePushNotification({
+        recipientUid: params.recipientUid,
+        title: 'Dilbaz Düellosu Başlıyor! ⚔️',
+        body: `${senderLabel} seni Dilbaz'da düelloya davet ediyor, acele et! (${dateStr})`,
+        tag: `invite_${inviteId}`,
+        roomCode: params.roomCode,
+        tab: 'room',
+        idToken
+      });
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -413,7 +451,8 @@ export function subscribeToMyRoomInvites(
 export async function respondToRoomInvite(
   inviteId: string,
   status: 'accepted' | 'dismissed',
-  roomCode?: string
+  roomCode?: string,
+  options?: { senderUid?: string; responderName?: string }
 ): Promise<void> {
   const path = `roomInvites/${inviteId}`;
   try {
@@ -425,6 +464,21 @@ export async function respondToRoomInvite(
       await updateDoc(doc(db, 'rooms', roomCode.trim().toUpperCase()), {
         invitedUids: arrayRemove(auth.currentUser.uid)
       }).catch(() => undefined);
+    }
+    if (status === 'dismissed' && options?.senderUid) {
+      const cleanCode = (roomCode || '').trim().toUpperCase();
+      const responder = options.responderName?.trim() || 'Arkadaşın';
+      void getCurrentUserIdToken().then((idToken) => {
+        if (!idToken) return;
+        return triggerRemotePushNotification({
+          recipientUid: options.senderUid!,
+          title: 'Oda Daveti Kabul Edilmedi',
+          body: `${responder}, ${cleanCode} odası davetini kabul etmedi. Gerekirse tekrar davet edebilirsin.`,
+          tag: `invite_declined_${inviteId}`,
+          tab: 'friends',
+          idToken
+        });
+      });
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);

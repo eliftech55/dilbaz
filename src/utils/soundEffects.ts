@@ -179,8 +179,8 @@ export function playTone(type: SoundToneType) {
       gain.connect(ctx.destination);
       osc.start(now);
       osc.stop(now + 0.24);
-    } else if (type === 'hint' || type === 'notification') {
-      const notes = type === 'notification' ? [659.25, 987.77, 1318.51] : [880, 1320];
+    } else if (type === 'hint') {
+      const notes = [880, 1320];
       notes.forEach((freq, idx) => {
         const o = ctx.createOscillator();
         const g = ctx.createGain();
@@ -193,8 +193,75 @@ export function playTone(type: SoundToneType) {
         o.start(now + idx * 0.08);
         o.stop(now + idx * 0.08 + 0.23);
       });
+    } else if (type === 'notification') {
+      playDilbazSynthChime(ctx, now);
     }
   } catch {
     // Ignore audio context restriction errors
   }
 }
+
+function playDilbazSynthChime(ctx: AudioContext, now: number): void {
+  // Custom Dilbaz motif: Anatolian Santur / Ebru Golden Chime (D5 -> F#5 -> A5 -> D6 + A6 shimmer)
+  const motif = [
+    { offset: 0.0, freq: 587.33, dur: 0.36, amp: 0.11 },
+    { offset: 0.09, freq: 739.99, dur: 0.38, amp: 0.1 },
+    { offset: 0.18, freq: 880.0, dur: 0.44, amp: 0.11 },
+    { offset: 0.28, freq: 1174.66, dur: 0.62, amp: 0.13 },
+    { offset: 0.3, freq: 1760.0, dur: 0.45, amp: 0.045 }
+  ];
+
+  motif.forEach(({ offset, freq, dur, amp }) => {
+    const fundamental = ctx.createOscillator();
+    const harmonic = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const harmGain = ctx.createGain();
+
+    fundamental.type = 'triangle';
+    fundamental.frequency.setValueAtTime(freq, now + offset);
+
+    harmonic.type = 'sine';
+    harmonic.frequency.setValueAtTime(freq * 2, now + offset);
+
+    gain.gain.setValueAtTime(0.001, now + offset);
+    gain.gain.linearRampToValueAtTime(amp, now + offset + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0008, now + offset + dur);
+
+    harmGain.gain.setValueAtTime(amp * 0.35, now + offset);
+    harmGain.gain.exponentialRampToValueAtTime(0.0005, now + offset + dur * 0.55);
+
+    fundamental.connect(gain);
+    harmonic.connect(harmGain);
+    harmGain.connect(gain);
+    gain.connect(ctx.destination);
+
+    fundamental.start(now + offset);
+    harmonic.start(now + offset);
+    fundamental.stop(now + offset + dur + 0.02);
+    harmonic.stop(now + offset + dur + 0.02);
+  });
+}
+
+let cachedNotifAudio: HTMLAudioElement | null = null;
+
+export function playDilbazNotificationSound(): void {
+  if (globalMuted || typeof window === 'undefined') return;
+  try {
+    const base = import.meta.env.BASE_URL || '/';
+    if (!cachedNotifAudio) {
+      cachedNotifAudio = new Audio(`${base}sounds/dilbaz-bildirim.wav`);
+      cachedNotifAudio.preload = 'auto';
+      cachedNotifAudio.volume = 0.85;
+    }
+    cachedNotifAudio.currentTime = 0;
+    const p = cachedNotifAudio.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => {
+        playTone('notification');
+      });
+    }
+  } catch {
+    playTone('notification');
+  }
+}
+

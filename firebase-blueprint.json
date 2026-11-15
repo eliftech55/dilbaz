@@ -229,6 +229,19 @@
         "updatedAt": { "type": "number" }
       },
       "required": ["id", "roomCode", "roomTitle", "senderUid", "senderName", "senderAvatar", "recipientUid", "status", "createdAt", "updatedAt"]
+    },
+    "PushSubscription": {
+      "title": "PushSubscription",
+      "description": "Registered Web Push device metadata per signed-in user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "endpoint": { "type": "string", "maxLength": 1024 },
+        "userAgent": { "type": "string", "maxLength": 200 },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "uid", "endpoint", "updatedAt"]
     }
   },
   "firestore": {
@@ -275,6 +288,10 @@
     "/roomInvites/{inviteId}": {
       "schema": "RoomInvite",
       "description": "Direct room invitations sent to friends for instant notifications and joining"
+    },
+    "/pushSubscriptions/{subId}": {
+      "schema": "PushSubscription",
+      "description": "Owner-only registered Web Push device endpoints"
     }
   }
 }

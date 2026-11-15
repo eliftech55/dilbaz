@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { Friendship, Room, RoomInvite, UserProfile } from '../types/game';
 import { KilimAvatar } from './KilimAvatar';
@@ -13,9 +13,12 @@ import {
 import {
   getNotificationSupportState,
   requestMobileNotificationPermission,
-  sendMobilePushNotification
+  sendMobilePushNotification,
+  ensureWebPushSubscribed,
+  fetchWebPushStatus,
+  triggerRemotePushNotification
 } from '../utils/mobileNotifications';
-import { playTone } from '../utils/soundEffects';
+import { playTone, playDilbazNotificationSound } from '../utils/soundEffects';
 import {
   UserPlus,
   Users,
@@ -31,7 +34,9 @@ import {
   Lock,
   Smartphone,
   Sparkles,
-  Clock
+  Clock,
+  Volume2,
+  Radio
 } from 'lucide-react';
 
 interface FriendsPanelProps {
@@ -73,6 +78,39 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const [notifState, setNotifState] = useState(() => getNotificationSupportState());
   const [testPushFeedback, setTestPushFeedback] = useState<string | null>(null);
+  const [bgPushDevices, setBgPushDevices] = useState<number>(0);
+  const [isSyncingPush, setIsSyncingPush] = useState(false);
+
+  useEffect(() => {
+    if (!authUser) {
+      setBgPushDevices(0);
+      return;
+    }
+    let cancelled = false;
+    const checkPush = async () => {
+      try {
+        const idToken = await authUser.getIdToken();
+        if (!idToken || cancelled) return;
+        if (notifState.permission === 'granted') {
+          const res = await ensureWebPushSubscribed(authUser.uid, idToken);
+          if (!cancelled) {
+            setBgPushDevices(res.registeredDevices);
+          }
+        } else {
+          const status = await fetchWebPushStatus(idToken);
+          if (!cancelled && status.ok) {
+            setBgPushDevices(status.registeredDevices);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+    void checkPush();
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, notifState.permission]);
 
   const myUid = authUser?.uid || '';
   const myName = userProfile?.username || authUser?.email?.split('@')[0] || 'Üye';
@@ -114,34 +152,89 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
 
   const handleEnableNotifications = async () => {
     playTone('tap');
-    const perm = await requestMobileNotificationPermission();
-    setNotifState(getNotificationSupportState());
-    if (perm === 'granted') {
-      await sendMobilePushNotification({
-        title: 'Dilbaz Bildirimleri Aktif!',
-        body: 'Arkadaşların seni yarışma odasına davet ettiğinde telefonuna bildirim gelecek.',
-        tag: 'dilbaz_notif_ready',
-        tab: 'friends'
-      });
-      setTestPushFeedback('Telefon bildirimleri başarıyla açıldı!');
-      setTimeout(() => setTestPushFeedback(null), 3500);
+    setIsSyncingPush(true);
+    try {
+      const perm = await requestMobileNotificationPermission();
+      setNotifState(getNotificationSupportState());
+      if (perm === 'granted' && authUser) {
+        const idToken = await authUser.getIdToken();
+        const subRes = await ensureWebPushSubscribed(authUser.uid, idToken);
+        setBgPushDevices(subRes.registeredDevices);
+        await sendMobilePushNotification({
+          title: 'Dilbaz Bildirimleri Aktif!',
+          body: subRes.subscribed
+            ? 'Artık uygulama kapalıyken bile arkadaş davetlerin Dilbaz logosuyla telefonuna düşecek!'
+            : 'Arkadaşların seni yarışma odasına davet ettiğinde telefonuna bildirim gelecek.',
+          tag: 'dilbaz_notif_ready',
+          tab: 'friends'
+        });
+        setTestPushFeedback(
+          subRes.subscribed
+            ? 'Telefon ve arka plan (kapalıyken) push bildirimleri başarıyla açıldı!'
+            : 'Bildirim izni açıldı!'
+        );
+        setTimeout(() => setTestPushFeedback(null), 4500);
+      }
+    } finally {
+      setIsSyncingPush(false);
     }
   };
 
+  const handlePlayDilbazSound = () => {
+    playDilbazNotificationSound();
+    setTestPushFeedback('Dilbaz özel santur/ebru bildirim sesi çalındı.');
+    setTimeout(() => setTestPushFeedback(null), 3000);
+  };
+
   const handleSendTestNotification = async () => {
-    playTone('notification');
     const sent = await sendMobilePushNotification({
-      title: 'Dilbaz Test Bildirimi',
-      body: 'Oda davetleri ve arkadaşlık teklifleri telefonuna bu şekilde düşecek!',
+      title: 'Dilbaz Düellosu Başlıyor! ⚔️',
+      body: 'Oda davetleri ve arkadaşlık teklifleri telefonuna Dilbaz ikonuyla bu şekilde düşecek!',
       tag: 'dilbaz_test_push',
       tab: 'friends'
     });
     setTestPushFeedback(
       sent
-        ? 'Test bildirimi gönderildi!'
+        ? 'Anlık test bildirimi Dilbaz logosu ve sesiyle gönderildi!'
         : 'Tarayıcı bildirim izni henüz verilmedi veya desteklenmiyor.'
     );
     setTimeout(() => setTestPushFeedback(null), 3500);
+  };
+
+  const handleSendBackgroundTestPush = async () => {
+    if (!authUser) return;
+    playTone('tap');
+    setIsSyncingPush(true);
+    try {
+      const idToken = await authUser.getIdToken();
+      const subRes = await ensureWebPushSubscribed(authUser.uid, idToken);
+      setBgPushDevices(subRes.registeredDevices);
+      if (!subRes.subscribed) {
+        setTestPushFeedback(
+          'Arka plan Web Push kaydı tamamlanamadı. Lütfen Chrome/WebAPK üzerinden bildirim iznini kontrol et.'
+        );
+        setTimeout(() => setTestPushFeedback(null), 4500);
+        return;
+      }
+      const res = await triggerRemotePushNotification({
+        recipientUid: authUser.uid,
+        title: 'Dilbaz Düellosu Başlıyor! ⚔️',
+        body: 'Uygulama kapalıyken bile arka plan Web Push başarıyla çalıştı!',
+        tag: `dilbaz_bg_test_${Date.now()}`,
+        tab: 'friends',
+        badgeCount: 1,
+        delayMs: 4000,
+        idToken
+      });
+      setTestPushFeedback(
+        res.ok
+          ? '4 saniye içinde arka plan bildirimi gönderilecek! Şimdi uygulamayı kapatıp veya küçültüp bekleyebilirsin.'
+          : 'Arka plan push isteği gönderilemedi.'
+      );
+      setTimeout(() => setTestPushFeedback(null), 6000);
+    } finally {
+      setIsSyncingPush(false);
+    }
   };
 
   const handleSendFriendRequest = async (e: React.FormEvent) => {
@@ -267,51 +360,81 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
           <PWAInstallButton />
         </div>
 
-        {/* Mobile Push Permission Box */}
-        <div className="p-3.5 rounded-2xl bg-[#0d1629]/85 border border-[#3A86FF]/35 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#3A86FF]/20 text-[#00F5D4] flex items-center justify-center shrink-0">
-              <Smartphone className="w-5 h-5" />
-            </div>
-            <div className="space-y-0.5 text-xs">
-              <div className="font-bold text-white flex items-center gap-1.5">
-                <span>Mobil Bildirimler</span>
-                {notifState.permission === 'granted' && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#06D6A0]/20 text-[#06D6A0] border border-[#06D6A0]/40">
-                    Açık ✓
-                  </span>
-                )}
+        {/* Mobile Push Permission & Sound Box */}
+        <div className="p-3.5 rounded-2xl bg-[#0d1629]/85 border border-[#3A86FF]/35 flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-[#3A86FF]/20 text-[#00F5D4] flex items-center justify-center shrink-0">
+                <Smartphone className="w-5 h-5" />
               </div>
-              <p className="text-[11px] text-[#CBD5E1]">
-                {notifState.permission === 'granted'
-                  ? 'Arkadaşların sana oda daveti veya arkadaşlık teklifi gönderdiğinde telefonuna bildirim düşer.'
-                  : notifState.permission === 'denied'
-                  ? 'Bildirim izni tarayıcı ayarlarından engellenmiş. Telefon ayarlarından bildirimlere izin verebilirsin.'
-                  : 'Yarışma davetlerini anında telefon ekranında görmek için bildirim izni ver.'}
-              </p>
+              <div className="space-y-0.5 text-xs">
+                <div className="font-bold text-white flex flex-wrap items-center gap-1.5">
+                  <span>Mobil & Arka Plan Bildirimleri</span>
+                  {notifState.permission === 'granted' && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#06D6A0]/20 text-[#06D6A0] border border-[#06D6A0]/40">
+                      İzin Açık ✓
+                    </span>
+                  )}
+                  {notifState.permission === 'granted' && bgPushDevices > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#3A86FF]/20 text-[#93C5FD] border border-[#3A86FF]/40">
+                      Kapalıyken Push Aktif ({bgPushDevices} cihaz)
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-[#CBD5E1]">
+                  {notifState.permission === 'granted'
+                    ? 'Oda davetleri ve arkadaşlık teklifleri uygulama kapalıyken bile Web Push ile Dilbaz logosuyla telefonuna düşer.'
+                    : notifState.permission === 'denied'
+                    ? 'Bildirim izni telefon/tarayıcı ayarlarından engellenmiş. Uygulama ayarlarından bildirimlere izin verebilirsin.'
+                    : 'Uygulama kapalıyken bile yarışma davetlerini Dilbaz logosuyla görmek için bildirim izni ver.'}
+                </p>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {notifState.permission === 'granted' ? (
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <button
                 type="button"
-                onClick={handleSendTestNotification}
-                className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-bold text-[#00F5D4] flex items-center gap-1.5 cursor-pointer"
+                onClick={handlePlayDilbazSound}
+                className="px-3 py-2 rounded-xl bg-[#FFBE0B]/15 hover:bg-[#FFBE0B]/25 border border-[#FFBE0B]/40 text-xs font-bold text-[#FFBE0B] flex items-center gap-1.5 cursor-pointer"
+                title="Dilbaz özel bildirim sesini dinle"
               >
-                <BellRing className="w-3.5 h-3.5" />
-                <span>Test Bildirimi</span>
+                <Volume2 className="w-3.5 h-3.5" />
+                <span>Bildirim Sesi</span>
               </button>
-            ) : notifState.supported && notifState.permission !== 'denied' ? (
-              <button
-                type="button"
-                onClick={handleEnableNotifications}
-                className="px-4 py-2 rounded-xl btn-epic-turquoise text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Bell className="w-3.5 h-3.5" />
-                <span>Bildirimleri Aç</span>
-              </button>
-            ) : null}
+
+              {notifState.permission === 'granted' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleSendTestNotification}
+                    className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-bold text-[#00F5D4] flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <BellRing className="w-3.5 h-3.5" />
+                    <span>Anlık Test</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSyncingPush}
+                    onClick={handleSendBackgroundTestPush}
+                    className="px-3 py-2 rounded-xl bg-[#3A86FF]/20 hover:bg-[#3A86FF]/30 border border-[#3A86FF]/45 text-xs font-bold text-[#93C5FD] flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    title="4 saniye gecikmeli gerçek Web Push gönderir; uygulamayı kapatıp test edebilirsin"
+                  >
+                    <Radio className="w-3.5 h-3.5" />
+                    <span>{isSyncingPush ? 'Hazırlanıyor...' : 'Kapalıyken Test (4 sn)'}</span>
+                  </button>
+                </>
+              ) : notifState.supported && notifState.permission !== 'denied' ? (
+                <button
+                  type="button"
+                  disabled={isSyncingPush}
+                  onClick={handleEnableNotifications}
+                  className="px-4 py-2 rounded-xl btn-epic-turquoise text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>{isSyncingPush ? 'Bağlanıyor...' : 'Bildirimleri Aç'}</span>
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
 

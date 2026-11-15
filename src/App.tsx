@@ -67,12 +67,13 @@ import { AuthModal } from './components/AuthModal';
 import { AdminPanel } from './components/AdminPanel';
 import { OfflineIndicator } from './components/PWAInstallButton';
 import { KILIM_MOTIFS, getKilimMotif } from './components/KilimAvatar';
-import { setSoundMuted, playTone } from './utils/soundEffects';
+import { setSoundMuted, playTone, playDilbazNotificationSound } from './utils/soundEffects';
 import {
   registerServiceWorker,
   sendMobilePushNotification,
   subscribeToNotificationClicks,
-  setAppBadgeCount
+  setAppBadgeCount,
+  ensureWebPushSubscribed
 } from './utils/mobileNotifications';
 import { Users, Mic, BookOpen, Trophy, Bell, X, UserPlus, Swords, UserCheck } from 'lucide-react';
 
@@ -310,7 +311,7 @@ export default function App() {
         for (const n of list) {
           if (!n.read && !seenNotifIdsRef.current.has(n.id)) {
             seenNotifIdsRef.current.add(n.id);
-            playTone('notification');
+            playDilbazNotificationSound();
             break;
           }
         }
@@ -462,6 +463,36 @@ export default function App() {
       avatar: userProfile.avatar
     });
   }, [authUser, userProfile]);
+
+  // Auto-register Web Push (VAPID) subscription when notification permission is granted
+  useEffect(() => {
+    if (!authUser) return;
+    let cancelled = false;
+    const syncPush = async () => {
+      if (typeof window === 'undefined' || !('Notification' in window)) return;
+      if (Notification.permission !== 'granted') return;
+      try {
+        const idToken = await authUser.getIdToken();
+        if (!cancelled && idToken) {
+          await ensureWebPushSubscribed(authUser.uid, idToken);
+        }
+      } catch {
+        // ignore transient errors
+      }
+    };
+    void syncPush();
+
+    const onSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'DILBAZ_PUSH_SUB_CHANGED') {
+        void syncPush();
+      }
+    };
+    navigator.serviceWorker?.addEventListener('message', onSwMessage);
+    return () => {
+      cancelled = true;
+      navigator.serviceWorker?.removeEventListener('message', onSwMessage);
+    };
+  }, [authUser]);
 
   // Update mobile app icon badge count dynamically
   useEffect(() => {
@@ -901,7 +932,10 @@ export default function App() {
   };
 
   const handleDismissRoomInvite = async (invite: RoomInvite) => {
-    await respondToRoomInvite(invite.id, 'dismissed', invite.roomCode).catch(() => undefined);
+    await respondToRoomInvite(invite.id, 'dismissed', invite.roomCode, {
+      senderUid: invite.senderUid,
+      responderName: currentUser.name
+    }).catch(() => undefined);
   };
 
   const handleInviteFriendToActiveRoom = async (friendUid: string) => {
