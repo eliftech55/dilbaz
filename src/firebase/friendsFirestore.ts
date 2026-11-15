@@ -46,10 +46,14 @@ export async function fetchInvitedRoomStatus(roomCode: string): Promise<InvitedR
     const snap = await getDoc(doc(db, 'rooms', roomCode.trim().toUpperCase()));
     if (!snap.exists()) return { exists: false };
     const data = snap.data() as { status?: RoomStatus; players?: { id: string }[] };
+    const players = Array.isArray(data.players) ? data.players : [];
+    const hasHuman = players.some((p) => !p.id.startsWith('bot-'));
+    const effectiveStatus: RoomStatus | undefined =
+      data.status !== 'game_over' && !hasHuman ? 'closed' : data.status;
     return {
       exists: true,
-      status: data.status,
-      playerIds: Array.isArray(data.players) ? data.players.map((p) => p.id) : []
+      status: effectiveStatus,
+      playerIds: players.map((p) => p.id)
     };
   } catch {
     return { exists: true };
@@ -69,10 +73,14 @@ export function subscribeToRoomStatus(
         return;
       }
       const data = snap.data() as { status?: RoomStatus; players?: { id: string }[] };
+      const players = Array.isArray(data.players) ? data.players : [];
+      const hasHuman = players.some((p) => !p.id.startsWith('bot-'));
+      const effectiveStatus: RoomStatus | undefined =
+        data.status !== 'game_over' && !hasHuman ? 'closed' : data.status;
       onChange({
         exists: true,
-        status: data.status,
-        playerIds: Array.isArray(data.players) ? data.players.map((p) => p.id) : []
+        status: effectiveStatus,
+        playerIds: players.map((p) => p.id)
       });
     },
     () => {

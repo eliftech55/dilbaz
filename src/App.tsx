@@ -1063,10 +1063,13 @@ export default function App() {
   const rejoinableRooms = useMemo(() => {
     const byCode = new Map<string, Room>();
     [...activeRooms, ...invitedActiveRooms].forEach((r) => {
+      const hasHumans =
+        Array.isArray(r.players) && r.players.some((p) => !p.id.startsWith('bot-'));
       if (
         r.code !== room?.code &&
         r.status !== 'closed' &&
         r.status !== 'game_over' &&
+        hasHumans &&
         !byCode.has(r.code)
       ) {
         byCode.set(r.code, r);

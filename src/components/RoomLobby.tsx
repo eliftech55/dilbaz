@@ -1346,58 +1346,78 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
       )}
 
       {/* Control Actions */}
-      <div className="flex flex-col sm:flex-row items-center gap-3">
-        <button
-          onClick={() => {
-            playTone('tap');
-            if (isHost && onCloseRoom) {
-              onCloseRoom();
-            } else {
-              onLeaveRoom();
-            }
-          }}
-          className="w-full sm:w-1/3 py-3.5 rounded-2xl bg-white/10 text-[#CBD5E1] hover:text-white hover:bg-white/15 border border-white/15 text-xs font-bold transition-colors cursor-pointer"
-        >
-          {isHost && onCloseRoom ? 'Odayı Kapat' : 'Odadan Ayrıl'}
-        </button>
+      {(() => {
+        const otherHumansCount = room.players.filter(
+          (p) => p.id !== currentUser.id && !p.id.startsWith('bot-')
+        ).length;
 
-        {!isHost && (
-          <button
-            onClick={() => {
-              playTone('tap');
-              onToggleReady();
-            }}
-            className={`w-full sm:w-2/3 py-3.5 rounded-2xl font-bold text-sm transition-all cursor-pointer ${
-              myPlayer?.isReady
-                ? 'bg-white/10 text-[#FFBE0B] border border-[#FFBE0B]/45'
-                : 'btn-epic-turquoise'
-            }`}
-          >
-            {myPlayer?.isReady ? 'Hazır Durumunu Kaldır' : 'HAZIRIM! (YARIŞMAYA KATIL)'}
-          </button>
-        )}
+        return (
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                playTone('tap');
+                onLeaveRoom();
+              }}
+              className="w-full sm:w-auto sm:min-w-[140px] px-4 py-3.5 rounded-2xl bg-white/10 text-[#CBD5E1] hover:text-white hover:bg-white/15 border border-white/15 text-xs font-bold transition-colors cursor-pointer"
+            >
+              Odadan Çık
+            </button>
 
-        {isHost && (
-          <button
-            onClick={async () => {
-              playTone('tap');
-              setIsStarting(true);
-              try {
-                await onStartGame();
-              } finally {
-                setIsStarting(false);
-              }
-            }}
-            disabled={room.players.length === 0 || isStarting}
-            className="w-full sm:w-2/3 py-4 rounded-[20px] btn-epic-pomegranate font-bold text-sm sm:text-base flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            <Play className="w-5 h-5 fill-current" />
-            <span>
-              {isStarting ? 'Yarışma Başlatılıyor...' : `YARIŞMAYI BAŞLAT (${room.players.length} Katılımcı)`}
-            </span>
-          </button>
-        )}
-      </div>
+            {isHost && onCloseRoom && otherHumansCount > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  playTone('tap');
+                  onCloseRoom();
+                }}
+                className="w-full sm:w-auto px-4 py-3.5 rounded-2xl bg-[#FF006E]/15 hover:bg-[#FF006E]/25 text-rose-200 border border-[#FF006E]/40 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Odayı Kapat
+              </button>
+            )}
+
+            {!isHost && (
+              <button
+                onClick={() => {
+                  playTone('tap');
+                  onToggleReady();
+                }}
+                className={`w-full sm:flex-1 py-3.5 rounded-2xl font-bold text-sm transition-all cursor-pointer ${
+                  myPlayer?.isReady
+                    ? 'bg-white/10 text-[#FFBE0B] border border-[#FFBE0B]/45'
+                    : 'btn-epic-turquoise'
+                }`}
+              >
+                {myPlayer?.isReady ? 'Hazır Durumunu Kaldır' : 'HAZIRIM! (YARIŞMAYA KATIL)'}
+              </button>
+            )}
+
+            {isHost && (
+              <button
+                onClick={async () => {
+                  playTone('tap');
+                  setIsStarting(true);
+                  try {
+                    await onStartGame();
+                  } finally {
+                    setIsStarting(false);
+                  }
+                }}
+                disabled={room.players.length === 0 || isStarting}
+                className="w-full sm:flex-1 py-4 rounded-[20px] btn-epic-pomegranate font-bold text-sm sm:text-base flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <Play className="w-5 h-5 fill-current" />
+                <span>
+                  {isStarting
+                    ? 'Yarışma Başlatılıyor...'
+                    : `YARIŞMAYI BAŞLAT (${room.players.length} Katılımcı)`}
+                </span>
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 };

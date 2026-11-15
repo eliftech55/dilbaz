@@ -178,6 +178,21 @@ export class RoomFirestore {
         throw new Error('Bu oda kurucusu tarafından kapatıldı (oda kaldırıldı).');
       }
 
+      const existingHumanCount = (roomData.players || []).filter(
+        (p) => !p.id.startsWith('bot-')
+      ).length;
+      if (existingHumanCount === 0) {
+        tx.update(
+          roomRef,
+          deepCleanForFirestore({
+            status: 'closed',
+            players: [],
+            updatedAt: Date.now()
+          })
+        );
+        throw new Error('Odada hiç oyuncu kalmadığı için bu oda kapatıldı.');
+      }
+
       const players = (roomData.players || []).map((p) => {
         const cleanP: any = {
           id: p.id,
@@ -376,6 +391,22 @@ export class RoomFirestore {
 
     const maxAgeCutoff = () => Date.now() - 12 * 60 * 60 * 1000;
 
+    const hasHumanPlayers = (r: Room): boolean =>
+      Array.isArray(r.players) && r.players.some((p) => !p.id.startsWith('bot-'));
+
+    const closeEmptyStaleRoom = (r: Room) => {
+      if (r.code && r.status !== 'closed' && r.status !== 'game_over' && !hasHumanPlayers(r)) {
+        updateDoc(
+          doc(db, 'rooms', r.code),
+          deepCleanForFirestore({
+            status: 'closed',
+            players: [],
+            updatedAt: Date.now()
+          })
+        ).catch(() => undefined);
+      }
+    };
+
     if (isAuthenticated && auth.currentUser?.uid === playerId) {
       const q = query(
         collection(db, 'rooms'),
@@ -386,12 +417,15 @@ export class RoomFirestore {
         q,
         (snap) => {
           const cutoff = maxAgeCutoff();
-          const active = snap.docs
-            .map((d) => d.data() as Room)
+          const allDocs = snap.docs.map((d) => d.data() as Room);
+          allDocs.forEach(closeEmptyStaleRoom);
+
+          const active = allDocs
             .filter(
               (r) =>
                 r.status !== 'closed' &&
                 r.status !== 'game_over' &&
+                hasHumanPlayers(r) &&
                 (!r.updatedAt || r.updatedAt >= cutoff)
             )
             .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -413,12 +447,15 @@ export class RoomFirestore {
     const roomMap: Record<string, Room | null> = {};
     const emit = () => {
       const cutoff = maxAgeCutoff();
-      const list = Object.values(roomMap)
-        .filter((r): r is Room => Boolean(r))
+      const allRooms = Object.values(roomMap).filter((r): r is Room => Boolean(r));
+      allRooms.forEach(closeEmptyStaleRoom);
+
+      const list = allRooms
         .filter(
           (r) =>
             r.status !== 'closed' &&
             r.status !== 'game_over' &&
+            hasHumanPlayers(r) &&
             (!r.updatedAt || r.updatedAt >= cutoff) &&
             (r.originalHostId === playerId ||
               r.hostId === playerId ||
@@ -471,6 +508,8 @@ export class RoomFirestore {
           (r) =>
             r.status !== 'closed' &&
             r.status !== 'game_over' &&
+            Array.isArray(r.players) &&
+            r.players.some((p) => !p.id.startsWith('bot-')) &&
             (!r.updatedAt || r.updatedAt >= cutoff)
         )
         .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));

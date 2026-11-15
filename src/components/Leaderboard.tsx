@@ -240,7 +240,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
           }}
           className="flex-1 py-3.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 text-white text-xs font-bold transition-colors cursor-pointer"
         >
-          Lobiye Dön
+          Odadan Çık (Lobiye Dön)
         </button>
 
         <button
