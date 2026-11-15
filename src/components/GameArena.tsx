@@ -34,6 +34,7 @@ interface GameArenaProps {
   timeLimitSeconds: number;
   currentUser: { id: string; name: string; avatar: string };
   isHost?: boolean;
+  phoenixLevel?: number;
   onFinishRound: (result: PlayerScore) => void;
   onLeaveRoom?: () => void;
   onPhoenixProgressUpdated?: () => void;
@@ -46,6 +47,7 @@ export const GameArena: React.FC<GameArenaProps> = ({
   timeLimitSeconds,
   currentUser,
   isHost = false,
+  phoenixLevel,
   onFinishRound,
   onLeaveRoom,
   onPhoenixProgressUpdated
@@ -585,6 +587,8 @@ export const GameArena: React.FC<GameArenaProps> = ({
         <div className="flex-1">
           <MascotDialogue
             mood={mascotMood}
+            level={phoenixLevel}
+            difficulty={tekerleme.difficulty}
             message={
               correctWordRatio >= 85
                 ? 'Harikasın! Zümrüdüanka tüyleri parlıyor, bitirmeye çok yakınsın!'

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Smartphone, Cpu, Network, Database, Award, Milestone, Copy, Check } from 'lucide-react';
+import { PhoenixWingPair } from './DilbazMascot';
 
 interface GuideModalProps {
   isOpen: boolean;
@@ -23,12 +24,15 @@ export const GuideModal: React.FC<GuideModalProps> = ({ isOpen, onClose }) => {
       <div className="relative w-full max-w-4xl bg-[#14213D] border-[1.5px] border-[#3A86FF]/45 rounded-[28px] shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col animate-screen-in">
         {/* Header */}
         <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-[#0d1629]/70">
-          <div className="flex items-center gap-3">
-            <img
-              src={`${import.meta.env.BASE_URL}assets/aistudio/logo_785c16ab.png`}
-              alt="Dilbaz"
-              className="w-9 h-9 rounded-full object-cover ring-2 ring-[#FFBE0B]/60"
-            />
+          <div className="flex items-center gap-3.5 pl-1.5">
+            <div className="relative w-9 h-9 shrink-0 mx-1">
+              <PhoenixWingPair compact />
+              <img
+                src={`${import.meta.env.BASE_URL}assets/aistudio/logo_785c16ab.png`}
+                alt="Dilbaz"
+                className="relative z-10 w-full h-full rounded-full object-cover ring-2 ring-[#FFBE0B]/60 animate-phoenix-bird-flap"
+              />
+            </div>
             <div>
               <h2 className="text-lg font-bold text-[#FFBE0B] font-display">
                 ✦ Dilbaz Hakkında & Mimari Rehber

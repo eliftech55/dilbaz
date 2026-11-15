@@ -13,6 +13,7 @@ interface LeaderboardProps {
   room: Room;
   currentUserId: string;
   authUid?: string | null;
+  phoenixLevel?: number;
   onRestartGame: () => void;
   onReturnToLobby: () => void;
   onOpenLeaderboard?: () => void;
@@ -22,6 +23,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
   room,
   currentUserId,
   authUid = null,
+  phoenixLevel,
   onRestartGame,
   onReturnToLobby,
   onOpenLeaderboard
@@ -111,7 +113,12 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
       {/* Victory Hero */}
       <div className="ebru-glass-card border-[1.5px] border-[#FFBE0B]/45 rounded-[28px] p-6 text-center space-y-2">
         <div className="flex justify-center mb-1">
-          <DilbazMascot mood="excited" size={96} />
+          <DilbazMascot
+            mood="excited"
+            size={96}
+            level={phoenixLevel}
+            difficulty={room.currentTekerleme?.difficulty || room.settings.difficulty}
+          />
         </div>
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFBE0B]/15 border border-[#FFBE0B]/40 text-[#FFBE0B] text-xs font-bold">
           <Trophy className="w-4 h-4" />

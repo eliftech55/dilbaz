@@ -4,6 +4,7 @@ import { DilbazMascot } from './DilbazMascot';
 import { KilimAvatar } from './KilimAvatar';
 import { triggerCelebration } from './FxCanvas';
 import { playTone } from '../utils/soundEffects';
+import { PhoenixDifficultyInput } from '../utils/phoenixProgression';
 import {
   Trophy,
   CheckCircle2,
@@ -25,6 +26,8 @@ interface RoundResultsProps {
   progressionMode?: RoomProgressionMode;
   hostLeftAutoMode?: boolean;
   timeLimitSeconds?: number;
+  phoenixLevel?: number;
+  difficulty?: PhoenixDifficultyInput | null;
   onForceFinishRound?: () => void;
   onNextRound: () => void;
   onLeaveRoom?: () => void;
@@ -41,6 +44,8 @@ export const RoundResults: React.FC<RoundResultsProps> = ({
   progressionMode = 'host',
   hostLeftAutoMode = false,
   timeLimitSeconds = 15,
+  phoenixLevel,
+  difficulty,
   onForceFinishRound,
   onNextRound,
   onLeaveRoom
@@ -135,7 +140,12 @@ export const RoundResults: React.FC<RoundResultsProps> = ({
       {/* Victory Card */}
       <div className="ebru-glass-card border-[1.5px] border-[#FFBE0B]/45 rounded-[28px] p-5 sm:p-6 text-center space-y-4">
         <div className="flex justify-center">
-          <DilbazMascot mood={currentUserScore.accuracy >= 50 ? 'excited' : 'sad'} size={90} />
+          <DilbazMascot
+            mood={currentUserScore.accuracy >= 50 ? 'excited' : 'sad'}
+            size={90}
+            level={phoenixLevel}
+            difficulty={difficulty}
+          />
         </div>
 
         <div className="space-y-1.5">

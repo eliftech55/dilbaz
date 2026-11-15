@@ -6,6 +6,8 @@ import {
   unlockOrEquipRelic,
   upgradeRelicRank
 } from '../utils/phoenixProgression';
+import { resolveEquippedVisuals } from './PhoenixEquippedVisuals';
+import { Phoenix3DViewer } from './Phoenix3DViewer';
 import { playTone } from '../utils/soundEffects';
 import {
   X,
@@ -17,10 +19,9 @@ import {
   Check,
   Lock,
   ArrowUpCircle,
-  Star
+  Star,
+  Eye
 } from 'lucide-react';
-import zumruduankaHeroImg from '../assets/images/zumruduanka_hero_1794737139184.jpg';
-import zumruduankaEvolvedImg from '../assets/images/zumruduanka_evolved_1794737131544.jpg';
 import zumruduankaRelicImg from '../assets/images/zumruduanka_relics_1794737130585.jpg';
 
 interface PhoenixSanctuaryModalProps {
@@ -39,15 +40,41 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
   onClose
 }) => {
   const [selectedSlot, setSelectedSlot] = useState<'all' | RelicSlot>('all');
+  const [previewRelicId, setPreviewRelicId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [heroImgErr, setHeroImgErr] = useState(false);
 
   if (!isOpen) return null;
 
-  const isEvolved =
-    phoenix.stage.useEvolvedArt || phoenix.activeCrest?.id === 'crest_celestial_halo';
-  const heroArt = isEvolved ? zumruduankaEvolvedImg : zumruduankaHeroImg;
+  const baseVisuals = resolveEquippedVisuals(phoenix);
+  const previewRelic = previewRelicId
+    ? phoenix.relics.find((r) => r.id === previewRelicId) || null
+    : null;
 
+  const effective3D = {
+    auraId: previewRelic?.slot === 'aura' ? previewRelic.id : baseVisuals.auraId,
+    auraRank:
+      previewRelic?.slot === 'aura'
+        ? Math.max(1, previewRelic.rank)
+        : baseVisuals.auraRank,
+    talismanId:
+      previewRelic?.slot === 'talisman' ? previewRelic.id : baseVisuals.talismanId,
+    talismanRank:
+      previewRelic?.slot === 'talisman'
+        ? Math.max(1, previewRelic.rank)
+        : baseVisuals.talismanRank,
+    crestId: previewRelic?.slot === 'crest' ? previewRelic.id : baseVisuals.crestId,
+    crestRank:
+      previewRelic?.slot === 'crest'
+        ? Math.max(1, previewRelic.rank)
+        : baseVisuals.crestRank,
+    ringGradient:
+      (previewRelic?.slot === 'aura' && previewRelic.id === 'aura_pomegranate_flame') ||
+      (previewRelic?.slot !== 'aura' && baseVisuals.auraId === 'aura_pomegranate_flame')
+        ? 'from-[#FF006E] via-[#FF5400] to-[#FFBE0B]'
+        : baseVisuals.ringGradient
+  };
+
+  const ownedRelics = phoenix.relics.filter((r) => r.unlocked);
   const filteredRelics =
     selectedSlot === 'all'
       ? phoenix.relics
@@ -146,28 +173,94 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
           </div>
         </div>
 
-        {/* Character Showcase & Visual Metrics */}
-        <div className="p-4 rounded-[24px] bg-[#0d1629]/85 border border-white/10 flex flex-col sm:flex-row items-center gap-4">
-          <div
-            className={`w-24 h-24 rounded-full p-[3px] bg-gradient-to-tr ${phoenix.stage.ringGradient} shrink-0 shadow-xl`}
-            style={{ boxShadow: `0 0 24px ${phoenix.activeAura.glowColor}55` }}
-          >
-            <div className="w-full h-full rounded-full overflow-hidden bg-[#0d1629] flex items-center justify-center">
-              {!heroImgErr ? (
-                <img
-                  src={heroArt}
-                  alt="Zümrüdüanka"
-                  referrerPolicy="no-referrer"
-                  onError={() => setHeroImgErr(true)}
-                  className="w-full h-full object-cover scale-105"
-                />
-              ) : (
-                <Sparkles className="w-8 h-8 text-[#FFBE0B]" />
-              )}
-            </div>
-          </div>
+        {/* 3D Interactive Character & Relic Preview Viewport */}
+        <div className="space-y-3">
+          <Phoenix3DViewer
+            level={phoenix.level}
+            stageName={phoenix.stage.name}
+            auraId={effective3D.auraId}
+            auraRank={effective3D.auraRank}
+            talismanId={effective3D.talismanId}
+            talismanRank={effective3D.talismanRank}
+            crestId={effective3D.crestId}
+            crestRank={effective3D.crestRank}
+            isPreviewing={Boolean(previewRelic)}
+            previewItemName={previewRelic?.name || null}
+            onResetPreview={() => {
+              playTone('tap');
+              setPreviewRelicId(null);
+            }}
+          />
 
-          <div className="flex-1 w-full space-y-2.5">
+          {/* Quick Preview Strip for Owned Rare Items */}
+          {ownedRelics.length > 0 && (
+            <div className="p-2.5 rounded-2xl bg-[#0d1629]/85 border border-white/10 space-y-1.5">
+              <div className="flex items-center justify-between text-[10.5px] text-[#93C5FD] px-0.5">
+                <span className="font-bold">Sahip Olduğun Ögeleri 3D Önizle</span>
+                {previewRelic && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTone('tap');
+                      setPreviewRelicId(null);
+                    }}
+                    className="text-[#FFBE0B] hover:underline font-semibold cursor-pointer"
+                  >
+                    Önizlemeyi Temizle
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {ownedRelics.map((owned) => {
+                  const isBeingPreviewed = previewRelicId === owned.id;
+                  return (
+                    <button
+                      key={owned.id}
+                      type="button"
+                      onClick={() => {
+                        playTone('tap');
+                        setPreviewRelicId(isBeingPreviewed ? null : owned.id);
+                      }}
+                      className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 border transition-colors cursor-pointer ${
+                        isBeingPreviewed
+                          ? 'bg-[#00F5D4]/20 border-[#00F5D4] text-[#00F5D4]'
+                          : owned.equipped
+                          ? 'bg-[#FFBE0B]/15 border-[#FFBE0B]/45 text-[#FFBE0B]'
+                          : 'bg-white/5 border-white/10 text-[#CBD5E1] hover:text-white'
+                      }`}
+                    >
+                      <Eye className="w-3 h-3 shrink-0" />
+                      <span>{owned.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Active Equipped Slots & Compact Stats */}
+          <div className="p-3.5 rounded-[22px] bg-[#0d1629]/85 border border-white/10 space-y-2.5">
+            <div className="grid grid-cols-3 gap-1.5 text-[10.5px]">
+              <div className="px-2 py-1.5 rounded-xl bg-white/5 border border-white/10 truncate">
+                <span className="text-[#94A3B8] block text-[9.5px]">Aura</span>
+                <span className="font-bold text-[#00F5D4] truncate block">
+                  {phoenix.relics.find((r) => r.id === effective3D.auraId)?.name || phoenix.activeAura.name}
+                </span>
+              </div>
+              <div className="px-2 py-1.5 rounded-xl bg-white/5 border border-white/10 truncate">
+                <span className="text-[#94A3B8] block text-[9.5px]">Tılsım</span>
+                <span className={`font-bold truncate block ${effective3D.talismanId ? 'text-[#3A86FF]' : 'text-[#64748B]'}`}>
+                  {phoenix.relics.find((r) => r.id === effective3D.talismanId)?.name || 'Boş'}
+                </span>
+              </div>
+              <div className="px-2 py-1.5 rounded-xl bg-white/5 border border-white/10 truncate">
+                <span className="text-[#94A3B8] block text-[9.5px]">Taç & İbik</span>
+                <span className={`font-bold truncate block ${effective3D.crestId ? 'text-[#FFBE0B]' : 'text-[#64748B]'}`}>
+                  {phoenix.relics.find((r) => r.id === effective3D.crestId)?.name || 'Boş'}
+                </span>
+              </div>
+            </div>
+
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="p-2 rounded-xl bg-white/5 border border-white/10">
                 <div className="text-sm font-display font-bold text-[#00F5D4] tabular-nums">
@@ -198,7 +291,7 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
               </div>
               <div className="h-2.5 w-full rounded-full bg-white/10 overflow-hidden">
                 <div
-                  className={`h-full rounded-full bg-gradient-to-r ${phoenix.stage.ringGradient}`}
+                  className={`h-full rounded-full bg-gradient-to-r ${effective3D.ringGradient}`}
                   style={{ width: `${phoenix.progressPercent}%` }}
                 />
               </div>
@@ -246,11 +339,15 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
               (phoenix.level < item.unlockLevel ||
                 (item.unlockWins ? (userProfile?.multiplayerWins ?? 0) < item.unlockWins : false));
 
+            const isPreviewingItem = previewRelicId === item.id;
+
             return (
               <div
                 key={item.id}
                 className={`p-3.5 rounded-2xl border flex flex-col justify-between gap-3 transition-all ${
-                  item.equipped
+                  isPreviewingItem
+                    ? 'bg-gradient-to-br from-[#00F5D4]/15 to-[#0d1629]/95 border-[#00F5D4] shadow-lg'
+                    : item.equipped
                     ? 'bg-gradient-to-br from-[#3A86FF]/20 to-[#0d1629]/95 border-[#FFBE0B]/70 shadow-lg'
                     : item.unlocked
                     ? 'bg-[#0d1629]/85 border-white/14'
@@ -304,6 +401,23 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
 
                   {/* Action Buttons */}
                   <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTone('tap');
+                        setPreviewRelicId(isPreviewingItem ? null : item.id);
+                      }}
+                      title="3D Kuş Üzerinde Önizle"
+                      className={`min-h-[34px] px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                        isPreviewingItem
+                          ? 'bg-[#00F5D4] text-[#0d1629]'
+                          : 'bg-white/10 hover:bg-white/20 text-[#CBD5E1] hover:text-white'
+                      }`}
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>{isPreviewingItem ? 'Önizlemede' : 'Önizle'}</span>
+                    </button>
+
                     {item.unlocked ? (
                       <>
                         {item.nextUpgradeCost !== null && (
@@ -323,7 +437,10 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
                         )}
                         <button
                           type="button"
-                          onClick={() => handleEquipOrUnlock(item.id)}
+                          onClick={() => {
+                            setPreviewRelicId(null);
+                            handleEquipOrUnlock(item.id);
+                          }}
                           className={`min-h-[34px] px-3 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
                             item.equipped
                               ? 'bg-[#06D6A0]/20 text-[#06D6A0] border border-[#06D6A0]/45'
@@ -338,7 +455,10 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
                       <button
                         type="button"
                         disabled={lockedByReq || phoenix.sparks < item.unlockCostSparks}
-                        onClick={() => handleEquipOrUnlock(item.id)}
+                        onClick={() => {
+                          setPreviewRelicId(null);
+                          handleEquipOrUnlock(item.id);
+                        }}
                         className={`min-h-[34px] px-3 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 tabular-nums ${
                           !lockedByReq && phoenix.sparks >= item.unlockCostSparks
                             ? 'btn-epic-turquoise cursor-pointer'

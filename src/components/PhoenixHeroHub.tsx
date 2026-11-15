@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { User } from 'firebase/auth';
 import { UserProfile } from '../types/game';
-import { PhoenixComputedState } from '../utils/phoenixProgression';
+import { PhoenixComputedState, PhoenixDifficultyInput, getPhoenixFlapSpeed } from '../utils/phoenixProgression';
 import { KilimAvatar } from './KilimAvatar';
+import { PhoenixWingPair } from './DilbazMascot';
+import { PhoenixCharacterRelicOverlay, resolveEquippedVisuals } from './PhoenixEquippedVisuals';
 import { playTone } from '../utils/soundEffects';
-import { Sparkles, Flame, Shield, Crown, Zap, LogIn, Backpack, ChevronRight } from 'lucide-react';
+import { Sparkles, Flame, Shield, Crown, Zap, LogIn, Backpack, ChevronRight, Feather } from 'lucide-react';
 import zumruduankaHeroImg from '../assets/images/zumruduanka_hero_1794737139184.jpg';
 import zumruduankaEvolvedImg from '../assets/images/zumruduanka_evolved_1794737131544.jpg';
 import zumruduankaRelicImg from '../assets/images/zumruduanka_relics_1794737130585.jpg';
@@ -21,6 +23,7 @@ interface PhoenixHeroHubProps {
   phoenix: PhoenixComputedState;
   authUser: User | null;
   userProfile: UserProfile | null;
+  activeDifficulty?: PhoenixDifficultyInput | null;
   onOpenSanctuary: () => void;
   onOpenAuth?: () => void;
 }
@@ -29,6 +32,7 @@ export const PhoenixHeroHub: React.FC<PhoenixHeroHubProps> = ({
   phoenix,
   authUser,
   userProfile,
+  activeDifficulty = 'kolay',
   onOpenSanctuary,
   onOpenAuth
 }) => {
@@ -38,8 +42,8 @@ export const PhoenixHeroHub: React.FC<PhoenixHeroHubProps> = ({
   const [heroFailed, setHeroFailed] = useState(false);
   const [relicFailed, setRelicFailed] = useState(false);
 
-  const isEvolved =
-    phoenix.stage.useEvolvedArt || phoenix.activeCrest?.id === 'crest_celestial_halo';
+  const visuals = resolveEquippedVisuals(phoenix);
+  const isEvolved = visuals.isEvolved;
   const characterImg = isEvolved ? zumruduankaEvolvedImg : zumruduankaHeroImg;
 
   const handlePhoenixTap = () => {
@@ -54,7 +58,11 @@ export const PhoenixHeroHub: React.FC<PhoenixHeroHubProps> = ({
     }, 2600);
   };
 
-  const auraGlow = phoenix.activeAura.glowColor || '#00F5D4';
+  const auraGlow = visuals.glowColor;
+  const flapInfo = getPhoenixFlapSpeed({
+    level: phoenix.level,
+    difficulty: activeDifficulty
+  });
 
   const renderEquippedSlotIcon = (
     badge: 'feather' | 'nazar' | 'flame' | 'crown' | 'bolt' | 'halo'
@@ -143,9 +151,9 @@ export const PhoenixHeroHub: React.FC<PhoenixHeroHubProps> = ({
         {/* Centerpiece: Zümrüdüanka Hero Stage */}
         <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-5">
           {/* Interactive 3D Character Pedestal */}
-          <div className="relative flex flex-col items-center shrink-0">
+          <div className={`relative flex flex-col items-center shrink-0 ${visuals.crestId ? 'pt-5' : 'pt-1'}`}>
             {quipText && (
-              <div className="absolute -top-3 z-20 px-3 py-1 rounded-xl bg-[#0d1629]/95 border border-[#FFBE0B]/65 text-[11px] font-bold text-[#FFBE0B] whitespace-nowrap shadow-xl animate-screen-in">
+              <div className="absolute -top-3 z-30 px-3 py-1 rounded-xl bg-[#0d1629]/95 border border-[#FFBE0B]/65 text-[11px] font-bold text-[#FFBE0B] whitespace-nowrap shadow-xl animate-screen-in">
                 {quipText}
               </div>
             )}
@@ -154,24 +162,38 @@ export const PhoenixHeroHub: React.FC<PhoenixHeroHubProps> = ({
               type="button"
               onClick={handlePhoenixTap}
               aria-label="Zümrüdüanka Karakteri"
-              className="relative group focus:outline-none cursor-pointer"
+              className="relative group focus:outline-none cursor-pointer mx-7 sm:mx-8"
+              style={
+                {
+                  '--phoenix-flap-duration': `${flapInfo.durationSeconds}s`
+                } as React.CSSProperties
+              }
             >
               {/* Soft reactive aura behind Zümrüdüanka */}
               <div
-                className="absolute -inset-2 rounded-full blur-xl opacity-60 group-hover:opacity-85 transition-opacity animate-pulse-aura pointer-events-none"
+                className="absolute -inset-3 rounded-full blur-xl opacity-70 group-hover:opacity-95 transition-opacity animate-pulse-aura pointer-events-none"
                 style={{
-                  background: `radial-gradient(circle, ${auraGlow}88 0%, rgba(255,0,110,0.35) 55%, transparent 75%)`
+                  background: `radial-gradient(circle, ${auraGlow}99 0%, rgba(255,0,110,0.4) 55%, transparent 76%)`
                 }}
+              />
+
+              {/* Dynamic Speed Feathered Wings (Aura & Talisman themed) */}
+              <PhoenixWingPair
+                auraId={visuals.auraId}
+                auraRank={visuals.auraRank}
+                talismanId={visuals.talismanId}
               />
 
               <div
                 key={tapCount}
-                className={`relative w-32 h-32 sm:w-36 sm:h-36 rounded-full p-[3px] bg-gradient-to-tr ${phoenix.stage.ringGradient} shadow-2xl animate-phoenix-float`}
+                className={`relative z-10 w-32 h-32 sm:w-36 sm:h-36 rounded-full p-[3.5px] bg-gradient-to-tr ${visuals.ringGradient} shadow-2xl animate-phoenix-bird-flap`}
                 style={{
-                  boxShadow: `0 14px 28px rgba(0,0,0,0.55), 0 0 26px ${auraGlow}44`
+                  boxShadow: `0 14px 28px rgba(0,0,0,0.55), 0 0 28px ${auraGlow}66`
                 }}
               >
-                <div className="w-full h-full rounded-full overflow-hidden bg-[#0d1629] flex items-center justify-center">
+                <PhoenixCharacterRelicOverlay visuals={visuals} />
+
+                <div className="relative z-10 w-full h-full rounded-full overflow-hidden bg-[#0d1629] flex items-center justify-center">
                   {!heroFailed ? (
                     <img
                       src={characterImg}
@@ -186,7 +208,7 @@ export const PhoenixHeroHub: React.FC<PhoenixHeroHubProps> = ({
                 </div>
 
                 {/* Floating Level Badge */}
-                <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-xl bg-[#0d1629] border-2 border-[#FFBE0B] text-[11px] font-display font-bold text-[#FFBE0B] whitespace-nowrap shadow-lg tabular-nums">
+                <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 z-20 px-2.5 py-0.5 rounded-xl bg-[#0d1629] border-2 border-[#FFBE0B] text-[11px] font-display font-bold text-[#FFBE0B] whitespace-nowrap shadow-lg tabular-nums">
                   Sv. {phoenix.level}
                 </div>
               </div>
@@ -202,8 +224,14 @@ export const PhoenixHeroHub: React.FC<PhoenixHeroHubProps> = ({
               <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight">
                 {phoenix.stage.name}
               </h1>
-              <div className="text-xs text-[#CBD5E1] font-medium tabular-nums">
-                {phoenix.xpIntoLevel} / {phoenix.xpForNextLevel} XP · {phoenix.progress.bestWpm > 0 ? `Rekor ${phoenix.progress.bestWpm} K/Dk` : 'Söz Arenasına Hazır'}
+              <div className="text-xs text-[#CBD5E1] font-medium tabular-nums flex flex-wrap items-center justify-center sm:justify-start gap-x-2 gap-y-0.5">
+                <span>
+                  {phoenix.xpIntoLevel} / {phoenix.xpForNextLevel} XP · {phoenix.progress.bestWpm > 0 ? `Rekor ${phoenix.progress.bestWpm} K/Dk` : 'Söz Arenasına Hazır'}
+                </span>
+                <span className="inline-flex items-center gap-1 text-[#00F5D4] font-semibold">
+                  <Feather className="w-3 h-3" />
+                  {flapInfo.tempoLabel} ({flapInfo.durationSeconds}s)
+                </span>
               </div>
             </div>
 

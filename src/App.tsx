@@ -69,7 +69,7 @@ import { PhoenixSanctuaryModal } from './components/PhoenixSanctuaryModal';
 import { OfflineIndicator } from './components/PWAInstallButton';
 import { KILIM_MOTIFS, getKilimMotif } from './components/KilimAvatar';
 import { setSoundMuted, playTone } from './utils/soundEffects';
-import { getPhoenixState } from './utils/phoenixProgression';
+import { getPhoenixFlapSpeed, getPhoenixState } from './utils/phoenixProgression';
 import {
   registerServiceWorker,
   sendMobilePushNotification,
@@ -87,6 +87,7 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isSanctuaryOpen, setIsSanctuaryOpen] = useState(false);
   const [phoenixVersion, setPhoenixVersion] = useState(0);
+  const [soloDifficulty, setSoloDifficulty] = useState<Difficulty>('kolay');
   const [editingTekerleme, setEditingTekerleme] = useState<Tekerleme | null>(null);
   const [roomError, setRoomError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -1221,6 +1222,24 @@ export default function App() {
     [userProfile, phoenixVersion]
   );
 
+  const activePhoenixDifficulty = useMemo(() => {
+    if (activeTab === 'solo') return soloDifficulty;
+    if (room) return room.currentTekerleme?.difficulty || room.settings.difficulty;
+    return 'kolay' as Difficulty;
+  }, [activeTab, soloDifficulty, room]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const flap = getPhoenixFlapSpeed({
+      level: phoenixState.level,
+      difficulty: activePhoenixDifficulty
+    });
+    document.documentElement.style.setProperty(
+      '--phoenix-global-flap-duration',
+      `${flap.durationSeconds}s`
+    );
+  }, [phoenixState.level, activePhoenixDifficulty]);
+
   return (
     <div className="relative min-h-screen text-[#F8FAFC] flex flex-col">
       <EbruBackground />
@@ -1466,6 +1485,7 @@ export default function App() {
                   timeLimitSeconds={room.settings.timeLimitSeconds}
                   currentUser={currentUser}
                   isHost={room.hostId === currentUser.id}
+                  phoenixLevel={phoenixState.level}
                   onFinishRound={handleFinishRound}
                   onLeaveRoom={handleLeaveRoom}
                   onPhoenixProgressUpdated={() => setPhoenixVersion((v) => v + 1)}
@@ -1503,6 +1523,8 @@ export default function App() {
                   progressionMode={room.settings.progressionMode || 'host'}
                   hostLeftAutoMode={Boolean(room.hostLeftAutoMode)}
                   timeLimitSeconds={room.settings.timeLimitSeconds}
+                  phoenixLevel={phoenixState.level}
+                  difficulty={room.currentTekerleme?.difficulty || room.settings.difficulty}
                   onForceFinishRound={() =>
                     RoomFirestore.finishRoundNow(room.code, currentUser.id, room.currentRound)
                   }
@@ -1516,6 +1538,7 @@ export default function App() {
                   room={room}
                   currentUserId={currentUser.id}
                   authUid={authUser?.uid || null}
+                  phoenixLevel={phoenixState.level}
                   onRestartGame={handleRestartGame}
                   onReturnToLobby={handleLeaveRoom}
                   onOpenLeaderboard={() => setActiveTab('leaderboard')}
@@ -1529,6 +1552,8 @@ export default function App() {
             <SoloPractice
               tekerlemeler={tekerlemeler}
               initialTekerlemeId={selectedPracticeTekerlemeId}
+              phoenixLevel={phoenixState.level}
+              onDifficultyChange={setSoloDifficulty}
               onPhoenixProgressUpdated={() => setPhoenixVersion((v) => v + 1)}
             />
           )}

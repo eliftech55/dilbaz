@@ -266,6 +266,124 @@
   animation: phoenixHover 4.2s ease-in-out infinite;
 }
 
+/* Zümrüdüanka Gentle Breeze-Sway Wing-Flap Keyframes (speed driven by --phoenix-flap-duration) */
+@keyframes phoenixWingFlapLeft {
+  0%, 100% {
+    transform: rotate(-4deg) scaleX(0.98) scaleY(1) translateY(0.5px);
+  }
+  38% {
+    transform: rotate(15deg) scaleX(1.03) scaleY(0.96) translateY(-2.5px);
+  }
+  70% {
+    transform: rotate(-11deg) scaleX(0.93) scaleY(1.02) translateY(2px);
+  }
+}
+
+@keyframes phoenixWingFlapRight {
+  0%, 100% {
+    transform: rotate(4deg) scaleX(0.98) scaleY(1) translateY(0.5px);
+  }
+  38% {
+    transform: rotate(-15deg) scaleX(1.03) scaleY(0.96) translateY(-2.5px);
+  }
+  70% {
+    transform: rotate(11deg) scaleX(0.93) scaleY(1.02) translateY(2px);
+  }
+}
+
+@keyframes phoenixBirdHoverFlap {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0) rotate(0deg);
+  }
+  33% {
+    transform: translate3d(-1.5px, -3.5px, 0) rotate(-1.2deg);
+  }
+  68% {
+    transform: translate3d(1.5px, 1.5px, 0) rotate(1.1deg);
+  }
+}
+
+@keyframes phoenixWingShimmer {
+  0%, 100% {
+    opacity: 0.84;
+    filter: drop-shadow(0 2px 6px rgba(0, 245, 212, 0.28));
+  }
+  50% {
+    opacity: 0.98;
+    filter: drop-shadow(0 3px 10px rgba(255, 190, 11, 0.5));
+  }
+}
+
+.animate-phoenix-wing-left {
+  transform-origin: 92% 56%;
+  animation:
+    phoenixWingFlapLeft var(--phoenix-flap-duration, var(--phoenix-global-flap-duration, 4.2s)) ease-in-out infinite,
+    phoenixWingShimmer var(--phoenix-flap-duration, var(--phoenix-global-flap-duration, 4.2s)) ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.animate-phoenix-wing-right {
+  transform-origin: 8% 56%;
+  animation:
+    phoenixWingFlapRight var(--phoenix-flap-duration, var(--phoenix-global-flap-duration, 4.2s)) ease-in-out infinite,
+    phoenixWingShimmer var(--phoenix-flap-duration, var(--phoenix-global-flap-duration, 4.2s)) ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.animate-phoenix-bird-flap {
+  animation: phoenixBirdHoverFlap var(--phoenix-flap-duration, var(--phoenix-global-flap-duration, 4.2s)) ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes relicHaloOrbit {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.04);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes relicEmberFloat {
+  0%, 100% {
+    transform: translateY(0px) scale(0.92);
+    opacity: 0.72;
+  }
+  50% {
+    transform: translateY(-6px) scale(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes relicTalismanGlow {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 2px 6px rgba(0, 245, 212, 0.45));
+  }
+  50% {
+    transform: scale(1.07);
+    filter: drop-shadow(0 3px 12px rgba(255, 190, 11, 0.75));
+  }
+}
+
+.animate-relic-halo {
+  animation: relicHaloOrbit 16s linear infinite;
+  will-change: transform;
+}
+
+.animate-relic-ember {
+  animation: relicEmberFloat 2.8s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.animate-relic-talisman {
+  animation: relicTalismanGlow 3.2s ease-in-out infinite;
+  will-change: transform, filter;
+}
+
 .game-card-3d {
   background: linear-gradient(165deg, rgba(28, 46, 84, 0.9) 0%, rgba(13, 22, 41, 0.94) 100%);
   border: 1.5px solid rgba(255, 255, 255, 0.14);
@@ -297,7 +415,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-phoenix-float {
-    animation: none;
+  .animate-phoenix-float,
+  .animate-phoenix-wing-left,
+  .animate-phoenix-wing-right,
+  .animate-phoenix-bird-flap,
+  .animate-relic-halo,
+  .animate-relic-ember,
+  .animate-relic-talisman {
+    animation: none !important;
   }
 }

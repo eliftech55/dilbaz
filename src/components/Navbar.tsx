@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User } from 'firebase/auth';
 import { UserProfile } from '../types/game';
 import { KilimAvatar } from './KilimAvatar';
+import { PhoenixWingPair } from './DilbazMascot';
 import { PWAInstallButton } from './PWAInstallButton';
 import { playTone } from '../utils/soundEffects';
 import {
@@ -118,16 +119,19 @@ export const Navbar: React.FC<NavbarProps> = ({
         <button
           type="button"
           onClick={() => handleSelectTab('room')}
-          className="flex items-center gap-2 shrink-0 text-left cursor-pointer"
+          className="flex items-center gap-2.5 shrink-0 text-left cursor-pointer pl-1.5"
         >
-          <div className="relative w-8 h-8 sm:w-10 sm:h-10 rounded-full p-[2px] bg-gradient-to-tr from-[#3A86FF] via-[#FF006E] to-[#FFBE0B] shadow-lg shadow-[#FF006E]/25 shrink-0">
-            <img
-              src={`${import.meta.env.BASE_URL}assets/aistudio/logo_785c16ab.png`}
-              alt="Dilbaz Logo"
-              className="w-full h-full rounded-full object-cover bg-[#14213D]"
-            />
+          <div className="relative w-8 h-8 sm:w-10 sm:h-10 shrink-0 mx-1">
+            <PhoenixWingPair compact />
+            <div className="relative z-10 w-full h-full rounded-full p-[2px] bg-gradient-to-tr from-[#3A86FF] via-[#FF006E] to-[#FFBE0B] shadow-lg shadow-[#FF006E]/25 animate-phoenix-bird-flap">
+              <img
+                src={`${import.meta.env.BASE_URL}assets/aistudio/logo_785c16ab.png`}
+                alt="Dilbaz Logo"
+                className="w-full h-full rounded-full object-cover bg-[#14213D]"
+              />
+            </div>
           </div>
-          <div className="leading-tight">
+          <div className="leading-tight ml-0.5">
             <span className="font-display text-lg sm:text-2xl font-bold tracking-wide bg-gradient-to-r from-white via-[#FFBE0B] to-[#FF006E] bg-clip-text text-transparent whitespace-nowrap">
               DİLBAZ
             </span>

@@ -274,6 +274,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
             phoenix={phoenixState}
             authUser={authUser}
             userProfile={userProfile}
+            activeDifficulty={difficulty}
             onOpenSanctuary={() => onOpenSanctuary?.()}
             onOpenAuth={onOpenAuth}
           />
@@ -929,6 +930,8 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
 
       <MascotDialogue
         mood="happy"
+        level={phoenixState?.level}
+        difficulty={room.currentTekerleme?.difficulty || room.settings.difficulty}
         message={
           isHost
             ? `Oda kodu ${room.code} hazır! Öğrencilerin bağlandıkça aşağıda görünecek, herkes hazır olunca yarışmayı başlat!`

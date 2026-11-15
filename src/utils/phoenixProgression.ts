@@ -1,4 +1,6 @@
-import { UserProfile } from '../types/game';
+import { Difficulty, UserProfile } from '../types/game';
+
+export type PhoenixDifficultyInput = 'karisik' | Difficulty;
 
 export type RelicSlot = 'aura' | 'talisman' | 'crest';
 
@@ -61,6 +63,49 @@ export interface PhoenixComputedState {
   activeAura: PhoenixRelicItem;
   activeTalisman: PhoenixRelicItem | null;
   activeCrest: PhoenixRelicItem | null;
+  flapDurationSeconds: number;
+  flapLabel: string;
+}
+
+export interface PhoenixFlapSpeedInfo {
+  durationSeconds: number;
+  wingBpm: number;
+  tempoLabel: string;
+}
+
+export function getPhoenixFlapSpeed(params?: {
+  level?: number;
+  difficulty?: PhoenixDifficultyInput | null;
+}): PhoenixFlapSpeedInfo {
+  const level = Math.max(1, Math.round(params?.level ?? 1));
+  const difficulty = params?.difficulty ?? 'kolay';
+
+  const difficultyBoostMap: Record<PhoenixDifficultyInput, number> = {
+    kolay: 0,
+    karisik: 0.35,
+    orta: 0.7,
+    zor: 1.15,
+    efsane: 1.55
+  };
+
+  const difficultyReduction = difficultyBoostMap[difficulty] ?? 0;
+  const levelReduction = Math.min(1.1, (level - 1) * 0.09);
+  const rawDuration = 4.4 - difficultyReduction - levelReduction;
+  const durationSeconds = Math.max(1.65, Math.min(4.6, Number(rawDuration.toFixed(2))));
+  const wingBpm = Math.round(60 / durationSeconds);
+
+  let tempoLabel = 'Meltem Süzülüşü';
+  if (durationSeconds < 2.15) {
+    tempoLabel = 'Canlı Rüzgar';
+  } else if (durationSeconds < 2.85) {
+    tempoLabel = 'Dinamik Esinti';
+  } else if (durationSeconds < 3.55) {
+    tempoLabel = 'Yumuşak Kanat';
+  } else if (durationSeconds < 4.05) {
+    tempoLabel = 'Hafif Esinti';
+  }
+
+  return { durationSeconds, wingBpm, tempoLabel };
 }
 
 const STORAGE_KEY = 'dilbaz_phoenix_progress_v1';
@@ -336,6 +381,7 @@ export function getPhoenixState(
     relics.find((r) => r.slot === 'talisman' && r.equipped && r.unlocked) || null;
   const activeCrest =
     relics.find((r) => r.slot === 'crest' && r.equipped && r.unlocked) || null;
+  const flapInfo = getPhoenixFlapSpeed({ level, difficulty: 'kolay' });
 
   return {
     level,
@@ -350,7 +396,9 @@ export function getPhoenixState(
     relics,
     activeAura,
     activeTalisman,
-    activeCrest
+    activeCrest,
+    flapDurationSeconds: flapInfo.durationSeconds,
+    flapLabel: flapInfo.tempoLabel
   };
 }
 

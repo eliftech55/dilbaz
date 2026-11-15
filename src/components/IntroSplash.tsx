@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Volume2, VolumeX, Play, Sparkles } from 'lucide-react';
 import { playTone } from '../utils/soundEffects';
+import { PhoenixWingPair } from './DilbazMascot';
 
 interface IntroSplashProps {
   onComplete: () => void;
@@ -51,12 +52,15 @@ export const IntroSplash: React.FC<IntroSplashProps> = ({ onComplete }) => {
       <div className="relative w-full max-w-2xl rounded-[32px] border border-white/15 bg-[#14213D]/90 shadow-2xl overflow-hidden animate-screen-in">
         {/* Top Bar with Logo + Sound Toggle */}
         <div className="px-5 py-3.5 flex items-center justify-between border-b border-white/10 bg-[#0d1629]/80">
-          <div className="flex items-center gap-3">
-            <img
-              src={`${import.meta.env.BASE_URL}assets/aistudio/logo_785c16ab.png`}
-              alt="Dilbaz Logo"
-              className="w-10 h-10 rounded-full object-cover ring-2 ring-[#FFBE0B]/60 shadow-md"
-            />
+          <div className="flex items-center gap-3.5 pl-1.5">
+            <div className="relative w-10 h-10 shrink-0 mx-1">
+              <PhoenixWingPair compact />
+              <img
+                src={`${import.meta.env.BASE_URL}assets/aistudio/logo_785c16ab.png`}
+                alt="Dilbaz Logo"
+                className="relative z-10 w-full h-full rounded-full object-cover ring-2 ring-[#FFBE0B]/60 shadow-md animate-phoenix-bird-flap"
+              />
+            </div>
             <div>
               <div className="font-display text-lg font-bold tracking-wide bg-gradient-to-r from-white via-[#FFBE0B] to-[#FF006E] bg-clip-text text-transparent">
                 DİLBAZ
@@ -103,12 +107,13 @@ export const IntroSplash: React.FC<IntroSplashProps> = ({ onComplete }) => {
             />
           ) : (
             <div className="flex flex-col items-center justify-center p-8 text-center space-y-4">
-              <div className="relative">
+              <div className="relative mx-8">
                 <div className="absolute -inset-4 rounded-full bg-gradient-to-tr from-[#3A86FF]/40 via-[#FF006E]/30 to-[#FFBE0B]/40 blur-xl animate-pulse-aura" />
+                <PhoenixWingPair />
                 <img
                   src={`${import.meta.env.BASE_URL}assets/aistudio/logo_785c16ab.png`}
                   alt="Dilbaz Ebru Zümrüdüanka"
-                  className="relative w-36 h-36 rounded-full object-cover ring-4 ring-[#FFBE0B]/70 shadow-2xl"
+                  className="relative z-10 w-36 h-36 rounded-full object-cover ring-4 ring-[#FFBE0B]/70 shadow-2xl animate-phoenix-bird-flap"
                 />
               </div>
               <p className="text-sm text-[#CBD5E1] max-w-md">

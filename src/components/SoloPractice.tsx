@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Tekerleme } from '../types/game';
+import { Difficulty, Tekerleme } from '../types/game';
 import { INITIAL_TEKERLEMELER } from '../data/tekerlemeler';
 import { SpeechEngine } from '../utils/speechEngine';
 import { evaluateSpeech, alignLiveWords, EvaluationResult } from '../utils/scoreCalculator';
@@ -14,12 +14,16 @@ import { Mic, Volume2, Shuffle, Sparkles, Radio, Timer } from 'lucide-react';
 interface SoloPracticeProps {
   tekerlemeler: Tekerleme[];
   initialTekerlemeId?: string;
+  phoenixLevel?: number;
+  onDifficultyChange?: (difficulty: Difficulty) => void;
   onPhoenixProgressUpdated?: () => void;
 }
 
 export const SoloPractice: React.FC<SoloPracticeProps> = ({
   tekerlemeler,
   initialTekerlemeId,
+  phoenixLevel,
+  onDifficultyChange,
   onPhoenixProgressUpdated
 }) => {
   const [selectedTekerleme, setSelectedTekerleme] = useState<Tekerleme>(() => {
@@ -49,6 +53,10 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
   const streakPlayedRef = useRef<boolean>(false);
 
   const maxReadingSeconds = Math.max(15, Math.ceil(selectedTekerleme.benchmarkSeconds * 2.5));
+
+  useEffect(() => {
+    onDifficultyChange?.(selectedTekerleme.difficulty);
+  }, [selectedTekerleme.difficulty, onDifficultyChange]);
 
   useEffect(() => {
     if (initialTekerlemeId) {
@@ -343,6 +351,8 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
         <div className="flex-1">
           <MascotDialogue
             mood={evaluation ? (evaluation.accuracy >= 65 ? 'excited' : 'sad') : 'happy'}
+            level={phoenixLevel}
+            difficulty={selectedTekerleme.difficulty}
             message={`Hedef Sesler (${selectedTekerleme.targetSounds.join(', ')}): ${selectedTekerleme.tip}`}
           />
         </div>
