@@ -5,6 +5,10 @@ import { KilimAvatar } from './KilimAvatar';
 import { PWAInstallButton } from './PWAInstallButton';
 import { playTone } from '../utils/soundEffects';
 import {
+  getNotificationSupportState,
+  requestMobileNotificationPermission
+} from '../utils/mobileNotifications';
+import {
   Smartphone,
   Monitor,
   BookOpen,
@@ -19,10 +23,22 @@ import {
   ShieldCheck,
   UserPlus,
   Menu,
-  X
+  X,
+  Bell,
+  Swords
 } from 'lucide-react';
 
 export type AppTab = 'room' | 'solo' | 'library' | 'friends' | 'leaderboard' | 'admin';
+
+export interface NavbarNotificationItem {
+  id: string;
+  title: string;
+  body: string;
+  kind: 'invite' | 'friend' | 'notif' | 'declined';
+  actionLabel?: string;
+  onAction?: () => void;
+  onDismiss?: () => void;
+}
 
 interface NavbarProps {
   activeTab: AppTab;
@@ -32,7 +48,10 @@ interface NavbarProps {
   onOpenGuide: () => void;
   pointsCount: number;
   pendingFriendsCount?: number;
+  unreadNotificationsCount?: number;
   pendingAdminCount?: number;
+  notificationItems?: NavbarNotificationItem[];
+  onEnablePushNotifications?: () => Promise<void>;
   isMuted: boolean;
   onToggleMute: () => void;
   onReplayIntro: () => void;
@@ -50,7 +69,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenGuide,
   pointsCount,
   pendingFriendsCount = 0,
+  unreadNotificationsCount = 0,
   pendingAdminCount = 0,
+  notificationItems = [],
+  onEnablePushNotifications,
   isMuted,
   onToggleMute,
   onReplayIntro,
@@ -60,14 +82,33 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | 'unsupported'>(() =>
+    getNotificationSupportState().permission
+  );
   const resolvedDisplayName =
     userProfile?.username || authUser?.displayName || authUser?.email?.split('@')[0] || 'Üye';
-  const totalBadgeCount = pendingFriendsCount + (isAdmin ? pendingAdminCount : 0);
+  const totalNotificationCount = Math.max(
+    notificationItems.length,
+    pendingFriendsCount + unreadNotificationsCount
+  );
+  const totalBadgeCount =
+    pendingFriendsCount + unreadNotificationsCount + (isAdmin ? pendingAdminCount : 0);
 
   const handleSelectTab = (tab: AppTab) => {
     playTone('tap');
     setActiveTab(tab);
     setMobileMenuOpen(false);
+    setNotifOpen(false);
+  };
+
+  const handleEnableOsNotifications = async () => {
+    playTone('tap');
+    const perm = await requestMobileNotificationPermission();
+    setNotifPermission(perm);
+    if (perm === 'granted' && onEnablePushNotifications) {
+      await onEnablePushNotifications();
+    }
   };
 
   return (
@@ -304,11 +345,131 @@ export const Navbar: React.FC<NavbarProps> = ({
             <HelpCircle className="w-4 h-4" />
           </button>
 
+          {/* Visible Notification Indicator Bell + Badge (Mobile & Desktop) */}
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                playTone('tap');
+                setNotifPermission(getNotificationSupportState().permission);
+                setMobileMenuOpen(false);
+                setNotifOpen((prev) => !prev);
+              }}
+              className={`relative w-9 h-9 rounded-full border flex items-center justify-center transition-colors cursor-pointer ${
+                totalNotificationCount > 0
+                  ? 'border-[#FF006E]/60 bg-[#FF006E]/20 text-[#FFBE0B]'
+                  : 'border-white/15 bg-white/5 hover:bg-[#3A86FF]/25 text-white'
+              }`}
+              title="Bildirimler"
+              aria-label={`Bildirimler (${totalNotificationCount})`}
+            >
+              <Bell className={`w-4 h-4 ${totalNotificationCount > 0 ? 'animate-pulse' : ''}`} />
+              {totalNotificationCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#FF006E] text-white text-[10px] font-bold leading-none flex items-center justify-center shadow-md border border-[#0d1629]">
+                  {totalNotificationCount > 99 ? '99+' : totalNotificationCount}
+                </span>
+              )}
+            </button>
+
+            {notifOpen && (
+              <div className="fixed sm:absolute right-2.5 sm:right-0 top-14 sm:top-12 w-[calc(100vw-20px)] sm:w-96 max-h-[72vh] overflow-y-auto rounded-2xl bg-[#0d1629]/98 border border-[#3A86FF]/45 shadow-2xl p-3.5 space-y-3 z-50 backdrop-blur-xl animate-screen-in">
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/10">
+                  <div className="flex items-center gap-2 text-xs font-display font-bold text-white">
+                    <Bell className="w-4 h-4 text-[#FFBE0B]" />
+                    <span>Bildirim Merkezi</span>
+                    {totalNotificationCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-[#FF006E] text-white text-[10px]">
+                        {totalNotificationCount}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setNotifOpen(false)}
+                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                    aria-label="Bildirim panelini kapat"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {notifPermission !== 'granted' && notifPermission !== 'unsupported' && (
+                  <div className="p-2.5 rounded-xl bg-[#FFBE0B]/15 border border-[#FFBE0B]/40 space-y-2 text-[11px]">
+                    <div className="text-[#FDE68A] font-medium">
+                      Uygulama ikonu sayısı ve sistem bildirim çubuğu göstergesi için bildirim izni verin.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleEnableOsNotifications}
+                      className="w-full min-h-[38px] px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#FFBE0B] to-[#FF5400] text-[#0d1629] font-bold text-xs cursor-pointer"
+                    >
+                      Telefon Bildirimlerini & İkon Sayacını Aç
+                    </button>
+                  </div>
+                )}
+
+                {notificationItems.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-[#94A3B8]">
+                    Şu an okunmamış bildiriminiz yok.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {notificationItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="p-3 rounded-xl bg-[#14213D]/90 border border-white/10 space-y-2 text-xs"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-bold text-[#FFBE0B] flex items-center gap-1.5">
+                              {item.kind === 'invite' && <Swords className="w-3.5 h-3.5 text-[#00F5D4] shrink-0" />}
+                              <span className="truncate">{item.title}</span>
+                            </div>
+                            <p className="text-[#CBD5E1] text-[11px] mt-0.5 leading-relaxed">
+                              {item.body}
+                            </p>
+                          </div>
+                          {item.onDismiss && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                playTone('tap');
+                                item.onDismiss?.();
+                              }}
+                              className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white shrink-0 cursor-pointer"
+                              aria-label="Bildirimi kapat"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                        {item.onAction && item.actionLabel && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              playTone('tap');
+                              setNotifOpen(false);
+                              item.onAction?.();
+                            }}
+                            className="w-full min-h-[36px] px-3 py-1.5 rounded-xl btn-epic-turquoise text-[11px] font-bold cursor-pointer"
+                          >
+                            {item.actionLabel}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Mobile / Tablet Hamburger Menu Toggle (< lg) */}
           <button
             type="button"
             onClick={() => {
               playTone('tap');
+              setNotifOpen(false);
               setMobileMenuOpen((prev) => !prev);
             }}
             className="lg:hidden relative w-9 h-9 rounded-xl border border-white/15 bg-[#14213D]/90 hover:bg-white/10 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
@@ -317,7 +478,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             {!mobileMenuOpen && totalBadgeCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#FF006E] text-white text-[9px] font-bold flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[#FF006E] text-white text-[9px] font-bold flex items-center justify-center">
                 {totalBadgeCount}
               </span>
             )}

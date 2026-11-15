@@ -49,7 +49,7 @@ import {
   fetchInvitedRoomStatus,
   subscribeToRoomStatus
 } from './firebase/friendsFirestore';
-import { Navbar, AppTab } from './components/Navbar';
+import { Navbar, AppTab, NavbarNotificationItem } from './components/Navbar';
 import { EbruBackground } from './components/EbruBackground';
 import { FxCanvas } from './components/FxCanvas';
 import { IntroSplash } from './components/IntroSplash';
@@ -68,7 +68,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { PhoenixSanctuaryModal } from './components/PhoenixSanctuaryModal';
 import { OfflineIndicator } from './components/PWAInstallButton';
 import { KILIM_MOTIFS, getKilimMotif } from './components/KilimAvatar';
-import { setSoundMuted, playTone, playDilbazNotificationSound } from './utils/soundEffects';
+import { setSoundMuted, playTone } from './utils/soundEffects';
 import { getPhoenixState } from './utils/phoenixProgression';
 import {
   registerServiceWorker,
@@ -115,6 +115,7 @@ export default function App() {
   const initialInvitesLoadedRef = useRef<boolean>(false);
   const initialSentInvitesLoadedRef = useRef<boolean>(false);
   const friendshipsRef = useRef<Friendship[]>([]);
+  const badgeCountRef = useRef<number>(0);
 
   // Intro video splash state (skip automatically if joining directly via ?oda= link)
   const [showIntro, setShowIntro] = useState<boolean>(() => {
@@ -315,7 +316,14 @@ export default function App() {
         for (const n of list) {
           if (!n.read && !seenNotifIdsRef.current.has(n.id)) {
             seenNotifIdsRef.current.add(n.id);
-            playDilbazNotificationSound();
+            const unreadTotal = list.filter((item) => !item.read).length;
+            sendMobilePushNotification({
+              title: n.title || 'Dilbaz Bildirimi',
+              body: n.message,
+              tag: `notif_${n.id}`,
+              tab: 'library',
+              badgeCount: Math.max(unreadTotal, badgeCountRef.current + 1)
+            });
             break;
           }
         }
@@ -342,7 +350,8 @@ export default function App() {
               title: 'Yeni Arkadaşlık Teklifi! 🤝',
               body: `${f.requesterName} seninle Dilbaz kelime düelloları yapmak için arkadaşlık teklif etti.`,
               tag: `friend_${f.id}`,
-              tab: 'friends'
+              tab: 'friends',
+              badgeCount: Math.max(incomingPending.length, badgeCountRef.current + 1)
             });
           }
         }
@@ -366,13 +375,15 @@ export default function App() {
             const dateStr = formatInviteDateTime(inv.updatedAt || inv.createdAt);
             fetchInvitedRoomStatus(inv.roomCode).then((statusInfo) => {
               setInvitedRoomsInfo((prev) => ({ ...prev, [inv.roomCode]: statusInfo }));
+              const nextBadge = Math.max(pending.length, badgeCountRef.current + 1);
               if (!statusInfo.exists || statusInfo.status === 'closed') {
                 notifiedRoomEndKeysRef.current.add(`${inv.id}_closed`);
                 sendMobilePushNotification({
                   title: 'Oda Daveti · Oda Kaldırıldı',
                   body: `${inv.senderName} (${dateStr}) seni ${inv.roomCode} odasına davet etmişti ancak oda kurucusu tarafından kapatıldı.`,
                   tag: `invite_${inv.id}`,
-                  tab: 'friends'
+                  tab: 'friends',
+                  badgeCount: nextBadge
                 });
               } else if (statusInfo.status === 'game_over') {
                 notifiedRoomEndKeysRef.current.add(`${inv.id}_game_over`);
@@ -380,7 +391,8 @@ export default function App() {
                   title: 'Oda Daveti · Oyun Sona Erdi',
                   body: `${inv.senderName} (${dateStr}) seni ${inv.roomCode} odasına davet etmişti ancak bu odadaki oyun sona erdi.`,
                   tag: `invite_${inv.id}`,
-                  tab: 'friends'
+                  tab: 'friends',
+                  badgeCount: nextBadge
                 });
               } else {
                 sendMobilePushNotification({
@@ -388,7 +400,8 @@ export default function App() {
                   body: `${inv.senderName} seni Dilbaz'da düelloya davet ediyor, acele et! (${dateStr})`,
                   tag: `invite_${inv.id}`,
                   roomCode: inv.roomCode,
-                  tab: 'room'
+                  tab: 'room',
+                  badgeCount: nextBadge
                 });
               }
             });
@@ -440,7 +453,8 @@ export default function App() {
               title: 'Oda Daveti Kabul Edilmedi',
               body: `${friendName}, ${inv.roomCode} odası davetini kabul etmedi. Gerekirse tekrar davet edebilirsin.`,
               tag: `invite_declined_${inv.id}`,
-              tab: 'friends'
+              tab: 'friends',
+              badgeCount: Math.max(1, badgeCountRef.current + 1)
             });
           }
         }
@@ -497,17 +511,6 @@ export default function App() {
       navigator.serviceWorker?.removeEventListener('message', onSwMessage);
     };
   }, [authUser]);
-
-  // Update mobile app icon badge count dynamically
-  useEffect(() => {
-    const unreadNotifs = notifications.filter((n) => !n.read).length;
-    const pendingInvites = roomInvites.filter((inv) => inv.status === 'pending').length;
-    const pendingFriends = friendships.filter(
-      (f) => f.status === 'pending' && f.recipientUid === authUser?.uid
-    ).length;
-    const totalBadge = unreadNotifs + pendingInvites + pendingFriends;
-    setAppBadgeCount(totalBadge);
-  }, [notifications, roomInvites, friendships, authUser]);
 
   // Subscribe to approved community tekerlemeler only when signed in
   useEffect(() => {
@@ -1080,9 +1083,95 @@ export default function App() {
 
   useEffect(() => {
     const total =
-      pendingFriendsBadgeCount + unreadNotifications.length + (isAdmin ? pendingAdminCount : 0);
+      pendingFriendsBadgeCount +
+      unreadNotifications.length +
+      declinedInviteAlerts.length +
+      (isAdmin ? pendingAdminCount : 0);
+    badgeCountRef.current = total;
     setAppBadgeCount(total);
-  }, [pendingFriendsBadgeCount, unreadNotifications.length, isAdmin, pendingAdminCount]);
+  }, [
+    pendingFriendsBadgeCount,
+    unreadNotifications.length,
+    declinedInviteAlerts.length,
+    isAdmin,
+    pendingAdminCount
+  ]);
+
+  const navbarNotificationItems = useMemo<NavbarNotificationItem[]>(() => {
+    const items: NavbarNotificationItem[] = [];
+
+    for (const inv of pendingRoomInvites) {
+      const dateStr = formatInviteDateTime(inv.updatedAt || inv.createdAt);
+      items.push({
+        id: `inv_${inv.id}`,
+        title: `Oda Daveti · ${inv.roomCode}`,
+        body: `${inv.senderName} seni düelloya davet etti${dateStr ? ` (${dateStr})` : ''}.`,
+        kind: 'invite',
+        actionLabel: 'Odaya Katıl',
+        onAction: () => handleAcceptRoomInvite(inv),
+        onDismiss: () => handleDismissRoomInvite(inv)
+      });
+    }
+
+    if (authUser) {
+      const incomingReqs = friendships.filter(
+        (f) => f.status === 'pending' && f.recipientUid === authUser.uid
+      );
+      for (const req of incomingReqs) {
+        items.push({
+          id: `fr_${req.id}`,
+          title: 'Yeni Arkadaşlık İsteği',
+          body: `${req.requesterName} arkadaş olmak istiyor.`,
+          kind: 'friend',
+          actionLabel: 'Arkadaşlar Sekmesine Git',
+          onAction: () => setActiveTab('friends')
+        });
+      }
+    }
+
+    for (const alertItem of declinedInviteAlerts) {
+      items.push({
+        id: `dec_${alertItem.id}`,
+        title: `Davet Kabul Edilmedi (${alertItem.invite.roomCode})`,
+        body: `${alertItem.friendName} daveti kabul etmedi.`,
+        kind: 'declined',
+        actionLabel: 'Tekrar Davet Et',
+        onAction: () => handleReinviteFromAlert(alertItem),
+        onDismiss: () =>
+          setDeclinedInviteAlerts((prev) => prev.filter((a) => a.id !== alertItem.id))
+      });
+    }
+
+    for (const n of unreadNotifications) {
+      items.push({
+        id: `notif_${n.id}`,
+        title: n.title || 'Bildirim',
+        body: n.message,
+        kind: 'notif',
+        onDismiss: () => handleDismissNotification(n.id)
+      });
+    }
+
+    return items;
+  }, [
+    pendingRoomInvites,
+    authUser,
+    friendships,
+    declinedInviteAlerts,
+    unreadNotifications
+  ]);
+
+  const handleEnablePushFromNavbar = async () => {
+    if (!authUser) return;
+    try {
+      const idToken = await authUser.getIdToken();
+      if (idToken) {
+        await ensureWebPushSubscribed(authUser.uid, idToken);
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   const acceptedFriendsSummary = useMemo(() => {
     if (!authUser) return [];
@@ -1148,7 +1237,10 @@ export default function App() {
           onOpenGuide={() => setIsGuideOpen(true)}
           pointsCount={userProfile?.points ?? 0}
           pendingFriendsCount={pendingFriendsBadgeCount}
+          unreadNotificationsCount={unreadNotifications.length + declinedInviteAlerts.length}
           pendingAdminCount={pendingAdminCount}
+          notificationItems={navbarNotificationItems}
+          onEnablePushNotifications={handleEnablePushFromNavbar}
           isMuted={isMuted}
           onToggleMute={handleToggleMute}
           onReplayIntro={() => setShowIntro(true)}

@@ -9,7 +9,7 @@ import { MascotDialogue } from './DilbazMascot';
 import { triggerCelebration } from './FxCanvas';
 import { playTone, playComboWordTone } from '../utils/soundEffects';
 import { recordPracticeOrRoundReward } from '../utils/phoenixProgression';
-import { Mic, Square, Volume2, Shuffle, Sparkles } from 'lucide-react';
+import { Mic, Volume2, Shuffle, Sparkles, Radio, Timer } from 'lucide-react';
 
 interface SoloPracticeProps {
   tekerlemeler: Tekerleme[];
@@ -36,13 +36,19 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [practiceReward, setPracticeReward] = useState<{ xpEarned: number; sparksEarned: number } | null>(null);
   const [elapsed, setElapsed] = useState<number>(0);
+  const [autoStopStatus, setAutoStopStatus] = useState<string | null>(null);
 
   const speechEngineRef = useRef<SpeechEngine | null>(null);
   const timerRef = useRef<any>(null);
   const startTimeRef = useRef<number>(0);
+  const speechStartedAtRef = useRef<number>(0);
+  const lastSpeechActivityAtRef = useRef<number>(0);
+  const hasStoppedRef = useRef<boolean>(false);
   const transcriptRef = useRef<string>('');
   const prevCorrectCountRef = useRef<number>(0);
   const streakPlayedRef = useRef<boolean>(false);
+
+  const maxReadingSeconds = Math.max(15, Math.ceil(selectedTekerleme.benchmarkSeconds * 2.5));
 
   useEffect(() => {
     if (initialTekerlemeId) {
@@ -66,11 +72,15 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
   const handleStartPractice = async () => {
     playTone('round_start');
     setEvaluation(null);
+    setAutoStopStatus(null);
     transcriptRef.current = '';
     setSpokenTranscript('');
     setMicError(null);
     prevCorrectCountRef.current = 0;
     streakPlayedRef.current = false;
+    hasStoppedRef.current = false;
+    speechStartedAtRef.current = 0;
+    lastSpeechActivityAtRef.current = 0;
 
     const start = Date.now();
     startTimeRef.current = start;
@@ -78,7 +88,12 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
 
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
-      setElapsed((Date.now() - start) / 1000);
+      const nextElapsed = (Date.now() - start) / 1000;
+      setElapsed(nextElapsed);
+      if (nextElapsed >= maxReadingSeconds && !hasStoppedRef.current) {
+        setAutoStopStatus('Okuma süresi dolduğu için otomatik tamamlandı.');
+        handleStopPractice();
+      }
     }, 100);
 
     if (!speechEngineRef.current) {
@@ -88,6 +103,15 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
     const ok = await speechEngineRef.current.start({
       targetText: selectedTekerleme.text,
       onTranscriptChange: (text) => {
+        if (text.trim()) {
+          const now = Date.now();
+          if (!speechStartedAtRef.current) {
+            speechStartedAtRef.current = now;
+          }
+          if (text !== transcriptRef.current) {
+            lastSpeechActivityAtRef.current = now;
+          }
+        }
         transcriptRef.current = text;
         setSpokenTranscript(text);
       },
@@ -101,15 +125,23 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
 
     if (ok) {
       setIsListening(true);
+    } else if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
   };
 
   const handleStopPractice = async () => {
-    const rawStartMs = startTimeRef.current || Date.now() - 2000;
-    const effectiveStartMs = speechEngineRef.current
-      ? speechEngineRef.current.getEffectiveStartTime(rawStartMs)
-      : rawStartMs;
-    const duration = Math.max(0.8, (Date.now() - effectiveStartMs) / 1000);
+    if (hasStoppedRef.current) return;
+    hasStoppedRef.current = true;
+
+    const nowMs = Date.now();
+    const rawStartMs = startTimeRef.current || nowMs - 2000;
+    let duration = Math.max(0.8, (nowMs - rawStartMs) / 1000);
+    if (speechEngineRef.current) {
+      const bounds = speechEngineRef.current.getSpeakingBounds(rawStartMs, nowMs);
+      duration = Math.max(0.8, (bounds.endMs - bounds.startMs) / 1000);
+    }
 
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -194,6 +226,63 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
       setTimeout(() => playTone('combo_streak'), 110);
     }
   }, [wordsForDisplay, liveAccuracy, isListening]);
+
+  // Automatic completion when all words are read, speaker pauses too long, or initial silence lasts 8s
+  const soloWordsRef = useRef(wordsForDisplay);
+  soloWordsRef.current = wordsForDisplay;
+  const stopPracticeRef = useRef(handleStopPractice);
+  stopPracticeRef.current = handleStopPractice;
+
+  useEffect(() => {
+    if (!isListening) return;
+
+    const checker = setInterval(() => {
+      if (hasStoppedRef.current) return;
+      const now = Date.now();
+      const startedAt = startTimeRef.current;
+      if (!startedAt) return;
+
+      const words = soloWordsRef.current;
+      const matchedCount = words.filter(
+        (w) => w.status === 'correct' || w.status === 'imperfect'
+      ).length;
+      const lastWordMatched =
+        words.length > 0 &&
+        (words[words.length - 1].status === 'correct' ||
+          words[words.length - 1].status === 'imperfect');
+      const allOrFinalReached =
+        words.length > 0 &&
+        (matchedCount === words.length ||
+          (lastWordMatched && matchedCount / words.length >= 0.8));
+
+      const speechStartedAt = speechStartedAtRef.current;
+      const lastActivityAt = lastSpeechActivityAtRef.current;
+
+      if (allOrFinalReached && lastActivityAt > 0 && now - lastActivityAt >= 750) {
+        setAutoStopStatus('Metin tamamlandı! Pratik karnesi hazırlanıyor...');
+        stopPracticeRef.current();
+        return;
+      }
+
+      if (
+        speechStartedAt > 0 &&
+        lastActivityAt > 0 &&
+        now - speechStartedAt >= 1200 &&
+        now - lastActivityAt >= 2800
+      ) {
+        setAutoStopStatus('Sessizlik algılandı, okuma otomatik sonlandırıldı.');
+        stopPracticeRef.current();
+        return;
+      }
+
+      if (speechStartedAt === 0 && now - startedAt >= 8000) {
+        setAutoStopStatus('Uzun süre ses algılanmadığı için pratik otomatik sonlandırıldı.');
+        stopPracticeRef.current();
+      }
+    }, 250);
+
+    return () => clearInterval(checker);
+  }, [isListening]);
 
   return (
     <div className="max-w-2xl mx-auto space-y-4 animate-screen-in">
@@ -285,26 +374,53 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
         </div>
       )}
 
-      {/* Action Controls */}
+      {/* Action Controls (no manual stop button — auto-completes on finish, silence, or timeout) */}
       <div className="flex flex-col sm:flex-row gap-3">
         {!isListening ? (
           <button
             onClick={handleStartPractice}
-            className="flex-1 py-4 rounded-[20px] btn-epic-pomegranate font-bold text-sm sm:text-base flex items-center justify-center gap-2 cursor-pointer"
+            className="flex-1 min-h-[52px] py-4 rounded-[20px] btn-epic-pomegranate font-bold text-sm sm:text-base flex items-center justify-center gap-2 cursor-pointer"
           >
             <Mic className="w-5 h-5 fill-current" />
             <span>OKUMAYA BAŞLA (MİKROFONU AÇ)</span>
           </button>
         ) : (
-          <button
-            onClick={() => handleStopPractice()}
-            className="flex-1 py-4 rounded-[20px] btn-epic-turquoise font-bold text-sm sm:text-base flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Square className="w-5 h-5 fill-current" />
-            <span>OKUMAYI BİTİR ({elapsed.toFixed(1)} sn)</span>
-          </button>
+          <div className="flex-1 p-4 rounded-[22px] ebru-glass-card border border-[#06D6A0]/45 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Radio className="w-5 h-5 text-[#06D6A0] animate-pulse shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-xs sm:text-sm font-bold text-white">
+                    Dinleniyor · Otomatik Bitiş Aktif
+                  </div>
+                  <div className="text-[11px] text-[#93C5FD] truncate">
+                    Metin bittiğinde, uzun sessizlikte veya {maxReadingSeconds} sn dolunca otomatik tamamlanır.
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 font-mono text-sm font-bold text-[#FFBE0B] shrink-0 tabular-nums">
+                <Timer className="w-4 h-4" />
+                <span>{Math.max(0, Math.ceil(maxReadingSeconds - elapsed))}s</span>
+              </div>
+            </div>
+            <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-150"
+                style={{
+                  width: `${Math.max(5, Math.min(100, ((maxReadingSeconds - elapsed) / maxReadingSeconds) * 100))}%`,
+                  background: 'linear-gradient(90deg, #06D6A0 0%, #3A86FF 60%, #FFBE0B 100%)'
+                }}
+              />
+            </div>
+          </div>
         )}
       </div>
+
+      {autoStopStatus && !isListening && (
+        <div className="px-3.5 py-2 rounded-xl bg-[#3A86FF]/15 border border-[#3A86FF]/35 text-[11px] text-[#93C5FD] text-center">
+          {autoStopStatus}
+        </div>
+      )}
 
       {/* Practice Results Card */}
       {evaluation && (

@@ -251,9 +251,6 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  const isDevPreview =
-    typeof window !== 'undefined' && window.location.hostname.startsWith('ais-dev-');
-
   const getActiveShareUrl = (roomCode: string) => {
     return `${window.location.origin}/?oda=${encodeURIComponent(roomCode)}`;
   };
@@ -985,29 +982,20 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
         </div>
 
         {/* Share URL Box */}
-        <div className="p-3.5 bg-[#0d1629]/80 rounded-2xl border border-[#3A86FF]/30 text-xs space-y-2.5">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="space-y-0.5 min-w-0 flex-1">
-              <div className="text-[11px] font-semibold text-[#00F5D4] flex items-center gap-1.5">
-                <LinkIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>Odaya Direkt Katılım Bağlantısı</span>
-              </div>
-              <div className="font-mono text-[#CBD5E1] text-[11px] break-all select-all">
-                {getActiveShareUrl(room.code)}
-              </div>
+        <div className="p-3.5 bg-[#0d1629]/80 rounded-2xl border border-[#3A86FF]/30 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-xs font-semibold text-[#00F5D4] flex items-center gap-2">
+              <LinkIcon className="w-4 h-4 shrink-0" />
+              <span>Odaya Katılım Bağlantısı</span>
             </div>
             <button
+              type="button"
               onClick={copyShareLink}
-              className="px-3.5 py-1.5 rounded-xl bg-[#3A86FF]/25 hover:bg-[#3A86FF]/40 text-white border border-[#3A86FF]/45 text-xs font-bold cursor-pointer shrink-0 transition-colors"
+              className="min-h-[40px] px-4 py-2 rounded-xl bg-[#3A86FF]/25 hover:bg-[#3A86FF]/40 text-white border border-[#3A86FF]/45 text-xs font-bold cursor-pointer shrink-0 transition-colors"
             >
               {copiedLink ? 'Kopyalandı ✓' : 'Linki Kopyala'}
             </button>
           </div>
-          {isDevPreview && (
-            <div className="p-2.5 rounded-xl bg-[#FFBE0B]/10 border border-[#FFBE0B]/30 text-[11px] text-[#FDE68A] leading-relaxed">
-              <strong>Not:</strong> Şu an geliştirme önizlemesindesiniz (<code>ais-dev-...</code>). Öğrencilerin Google girişi olmadan katılabilmesi için AI Studio sağ üstteki <strong>Share / Publish (Paylaş)</strong> butonundan uygulamayı yayınlayın.
-            </div>
-          )}
         </div>
 
         {/* Room Settings */}

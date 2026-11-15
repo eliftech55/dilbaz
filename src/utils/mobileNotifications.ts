@@ -8,6 +8,7 @@ export interface MobilePushPayload {
   tag?: string;
   roomCode?: string;
   tab?: 'room' | 'friends' | 'library' | 'leaderboard';
+  badgeCount?: number;
 }
 
 export interface RemotePushDispatchPayload extends MobilePushPayload {
@@ -292,6 +293,9 @@ export async function sendMobilePushNotification(
 ): Promise<boolean> {
   vibrateMobileDevice([180, 80, 220]);
   playDilbazNotificationSound();
+  if (typeof payload.badgeCount === 'number') {
+    setAppBadgeCount(payload.badgeCount);
+  }
 
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return false;
@@ -402,16 +406,35 @@ export function subscribeToNotificationClicks(
 }
 
 export function setAppBadgeCount(count: number): void {
+  const safeCount = Math.max(0, Math.floor(count || 0));
   try {
     if (typeof navigator !== 'undefined') {
       const nav = navigator as Navigator & {
         setAppBadge?: (count?: number) => Promise<void>;
         clearAppBadge?: () => Promise<void>;
       };
-      if (count > 0 && typeof nav.setAppBadge === 'function') {
-        nav.setAppBadge(count).catch(() => {});
+      if (safeCount > 0 && typeof nav.setAppBadge === 'function') {
+        nav.setAppBadge(safeCount).catch(() => {});
       } else if (typeof nav.clearAppBadge === 'function') {
         nav.clearAppBadge().catch(() => {});
+      }
+
+      if ('serviceWorker' in navigator) {
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'DILBAZ_SET_BADGE',
+            count: safeCount
+          });
+        } else {
+          navigator.serviceWorker.ready
+            .then((reg) => {
+              reg.active?.postMessage({
+                type: 'DILBAZ_SET_BADGE',
+                count: safeCount
+              });
+            })
+            .catch(() => {});
+        }
       }
     }
   } catch {

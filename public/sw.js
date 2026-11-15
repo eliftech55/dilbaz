@@ -121,17 +121,35 @@ self.addEventListener('push', (event) => {
         badge: badgeUrl,
         sound: soundUrl,
         tag,
-        renotify: !hasVisibleClient,
+        renotify: true,
         requireInteraction: true,
         vibrate: [200, 90, 240, 90, 200],
         data: {
           roomCode,
           tab,
-          url: targetUrl
+          url: targetUrl,
+          hasVisibleClient
         }
       });
     })()
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'DILBAZ_SET_BADGE') {
+    const count = typeof event.data.count === 'number' ? Math.max(0, Math.floor(event.data.count)) : 0;
+    try {
+      if (self.navigator) {
+        if (count > 0 && typeof self.navigator.setAppBadge === 'function') {
+          self.navigator.setAppBadge(count).catch(() => undefined);
+        } else if (typeof self.navigator.clearAppBadge === 'function') {
+          self.navigator.clearAppBadge().catch(() => undefined);
+        }
+      }
+    } catch {
+      // ignore unsupported badge API
+    }
+  }
 });
 
 self.addEventListener('pushsubscriptionchange', (event) => {

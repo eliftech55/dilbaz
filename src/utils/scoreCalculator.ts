@@ -21,8 +21,8 @@ export interface EvaluationResult {
   }[];
 }
 
-const CORRECT_THRESHOLD = 0.78;
-const IMPERFECT_THRESHOLD = 0.55;
+const CORRECT_THRESHOLD = 0.76;
+const IMPERFECT_THRESHOLD = 0.54;
 
 interface AlignmentOutput {
   items: {
@@ -37,7 +37,7 @@ interface AlignmentOutput {
 
 /**
  * Unified optimal monotonic DP alignment algorithm shared by live display and final evaluation.
- * Handles 1-to-1, 1-to-2 (mobile split words), and 2-to-1 (merged words) without lookahead jumping/shifting.
+ * Handles 1-to-1, 1-to-2, 1-to-3 (mobile split words), and 2-to-1 (merged words) without lookahead jumping/shifting.
  */
 function alignWordsCore(originalText: string, spokenTranscript: string): AlignmentOutput {
   const rawTokens = originalText.split(/\s+/).filter(Boolean);
@@ -62,14 +62,14 @@ function alignWordsCore(originalText: string, spokenTranscript: string): Alignme
     };
   }
 
-  type OpType = 'none' | 'match11' | 'match12' | 'match21' | 'skipOrig' | 'skipSpoken';
+  type OpType = 'none' | 'match11' | 'match12' | 'match13' | 'match21' | 'skipOrig' | 'skipSpoken';
   const NEG_INF = -1e9;
   const dp: number[][] = Array.from({ length: M + 1 }, () => Array(N + 1).fill(NEG_INF));
   const op: OpType[][] = Array.from({ length: M + 1 }, () => Array<OpType>(N + 1).fill('none'));
   const simStore: number[][] = Array.from({ length: M + 1 }, () => Array(N + 1).fill(0));
 
   const SKIP_ORIG_PENALTY = -0.45;
-  const SKIP_SPOKEN_PENALTY = -0.12;
+  const SKIP_SPOKEN_PENALTY = -0.09;
 
   dp[0][0] = 0;
   for (let i = 1; i <= M; i++) {
@@ -124,6 +124,26 @@ function alignWordsCore(originalText: string, spokenTranscript: string): Alignme
             bestScore = candScore;
             bestOp = 'match12';
             bestSim = sim12;
+          }
+        }
+      }
+
+      // 1-to-3 match: T[i-1] <-> S[s-3] + S[s-2] + S[s-1] (mobile splits long agglutinative Turkish words)
+      if (s >= 3) {
+        const merged3 =
+          spokenNormWords[s - 3] + spokenNormWords[s - 2] + spokenNormWords[s - 1];
+        const sim13 = wordSimilarity(origWord, merged3);
+        const subBest = Math.max(
+          wordSimilarity(origWord, spokenNormWords[s - 3]),
+          wordSimilarity(origWord, spokenNormWords[s - 2]),
+          sim11
+        );
+        if (sim13 >= CORRECT_THRESHOLD && sim13 > subBest + 0.1) {
+          const candScore = dp[i - 1][s - 3] + 1.25 + sim13;
+          if (candScore > bestScore) {
+            bestScore = candScore;
+            bestOp = 'match13';
+            bestSim = sim13;
           }
         }
       }
@@ -197,6 +217,18 @@ function alignWordsCore(originalText: string, spokenTranscript: string): Alignme
       if (idx > lastMatchedOrigIdx) lastMatchedOrigIdx = idx;
       curI -= 1;
       curS -= 2;
+    } else if (action === 'match13') {
+      const idx = curI - 1;
+      const isCorrect = sim >= CORRECT_THRESHOLD;
+      statuses[idx] = {
+        word: pairs[idx].raw,
+        status: isCorrect ? 'correct' : 'imperfect',
+        recognizedAs: `${spokenNormWords[curS - 3]} ${spokenNormWords[curS - 2]} ${spokenNormWords[curS - 1]}`
+      };
+      matchedPoints += isCorrect ? 1.0 : sim;
+      if (idx > lastMatchedOrigIdx) lastMatchedOrigIdx = idx;
+      curI -= 1;
+      curS -= 3;
     } else if (action === 'match21') {
       const idx1 = curI - 2;
       const idx2 = curI - 1;

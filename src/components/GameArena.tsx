@@ -7,7 +7,7 @@ import { WordComparison } from './WordComparison';
 import { MascotDialogue } from './DilbazMascot';
 import { playTone, playComboWordTone } from '../utils/soundEffects';
 import { recordPracticeOrRoundReward } from '../utils/phoenixProgression';
-import { Square, Volume2, Timer, Zap, Mic, LogOut } from 'lucide-react';
+import { Volume2, Timer, Zap, Mic, LogOut, Radio } from 'lucide-react';
 
 interface WordBurstEffect {
   id: string;
@@ -65,10 +65,15 @@ export const GameArena: React.FC<GameArenaProps> = ({
   const [liveWordScore, setLiveWordScore] = useState(0);
   const [scorePopKey, setScorePopKey] = useState(0);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [autoStopNote, setAutoStopNote] = useState<string>(
+    'Okuma bitince, uzun sessizlikte veya süre dolunca otomatik sonlanır'
+  );
 
   const speechEngineRef = useRef<SpeechEngine | null>(null);
   const timerIntervalRef = useRef<any>(null);
   const startTimeRef = useRef<number>(0);
+  const speechStartedAtRef = useRef<number>(0);
+  const lastSpeechActivityAtRef = useRef<number>(0);
   const transcriptRef = useRef<string>('');
   const hasSubmittedRef = useRef<boolean>(false);
   const prevCorrectCountRef = useRef<number>(0);
@@ -135,6 +140,9 @@ export const GameArena: React.FC<GameArenaProps> = ({
 
   const startRound = async () => {
     startTimeRef.current = Date.now();
+    speechStartedAtRef.current = 0;
+    lastSpeechActivityAtRef.current = 0;
+    setAutoStopNote('Okuma bitince, uzun sessizlikte veya süre dolunca otomatik sonlanır');
     setTimeLeft(timeLimitSeconds);
     setElapsedSeconds(0);
     transcriptRef.current = '';
@@ -168,6 +176,7 @@ export const GameArena: React.FC<GameArenaProps> = ({
             clearInterval(timerIntervalRef.current);
             timerIntervalRef.current = null;
           }
+          setAutoStopNote('Süre dolduğu için okuma otomatik tamamlandı.');
           handleRoundComplete();
           return 0;
         }
@@ -187,6 +196,15 @@ export const GameArena: React.FC<GameArenaProps> = ({
     const ok = await speechEngineRef.current.start({
       targetText: tekerleme.text,
       onTranscriptChange: (text) => {
+        if (text.trim()) {
+          const now = Date.now();
+          if (!speechStartedAtRef.current) {
+            speechStartedAtRef.current = now;
+          }
+          if (text !== transcriptRef.current) {
+            lastSpeechActivityAtRef.current = now;
+          }
+        }
         transcriptRef.current = text;
         setSpokenTranscript(text);
       },
@@ -207,12 +225,13 @@ export const GameArena: React.FC<GameArenaProps> = ({
     if (hasSubmittedRef.current) return;
     hasSubmittedRef.current = true;
 
-    const rawStartMs = startTimeRef.current || Date.now() - 2000;
-    const effectiveStartMs =
-      overrideTranscript === undefined && speechEngineRef.current
-        ? speechEngineRef.current.getEffectiveStartTime(rawStartMs)
-        : rawStartMs;
-    const duration = Math.max(0.8, (Date.now() - effectiveStartMs) / 1000);
+    const nowMs = Date.now();
+    const rawStartMs = startTimeRef.current || nowMs - 2000;
+    let duration = Math.max(0.8, (nowMs - rawStartMs) / 1000);
+    if (overrideTranscript === undefined && speechEngineRef.current) {
+      const bounds = speechEngineRef.current.getSpeakingBounds(rawStartMs, nowMs);
+      duration = Math.max(0.8, (bounds.endMs - bounds.startMs) / 1000);
+    }
 
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
@@ -392,6 +411,66 @@ export const GameArena: React.FC<GameArenaProps> = ({
       effectTimersRef.current.push(streakTimer);
     }
   }, [wordsForDisplay, liveAccuracy, phase, currentRound]);
+
+  // Automatic round completion on full reading match, trailing silence, or initial long silence
+  const wordsSnapshotRef = useRef(wordsForDisplay);
+  wordsSnapshotRef.current = wordsForDisplay;
+  const finishRoundRef = useRef(handleRoundComplete);
+  finishRoundRef.current = handleRoundComplete;
+
+  useEffect(() => {
+    if (phase !== 'playing') return;
+
+    const checker = setInterval(() => {
+      if (hasSubmittedRef.current) return;
+      const now = Date.now();
+      const roundStart = startTimeRef.current;
+      if (!roundStart) return;
+
+      const words = wordsSnapshotRef.current;
+      const matchedCount = words.filter(
+        (w) => w.status === 'correct' || w.status === 'imperfect'
+      ).length;
+      const lastWordMatched =
+        words.length > 0 &&
+        (words[words.length - 1].status === 'correct' ||
+          words[words.length - 1].status === 'imperfect');
+      const allOrFinalReached =
+        words.length > 0 &&
+        (matchedCount === words.length ||
+          (lastWordMatched && matchedCount / words.length >= 0.8));
+
+      const speechStartedAt = speechStartedAtRef.current;
+      const lastActivityAt = lastSpeechActivityAtRef.current;
+
+      // 1) All words finished -> quick natural grace then auto-finish
+      if (allOrFinalReached && lastActivityAt > 0 && now - lastActivityAt >= 750) {
+        setAutoStopNote('Metin tamamlandı! Puanınız hesaplanıyor...');
+        finishRoundRef.current();
+        return;
+      }
+
+      // 2) Long silence after speaking started (2.8s)
+      if (
+        speechStartedAt > 0 &&
+        lastActivityAt > 0 &&
+        now - speechStartedAt >= 1200 &&
+        now - lastActivityAt >= 2800
+      ) {
+        setAutoStopNote('Sessizlik algılandı, okuma otomatik sonlandırılıyor...');
+        finishRoundRef.current();
+        return;
+      }
+
+      // 3) User stayed silent from the start for 8 seconds
+      if (speechStartedAt === 0 && now - roundStart >= 8000) {
+        setAutoStopNote('Uzun süre ses algılanmadığı için tur otomatik sonlandırıldı.');
+        finishRoundRef.current();
+      }
+    }, 250);
+
+    return () => clearInterval(checker);
+  }, [phase]);
 
   // COUNTDOWN OVERLAY
   if (phase === 'countdown') {
@@ -612,25 +691,37 @@ export const GameArena: React.FC<GameArenaProps> = ({
         </div>
       )}
 
-      {/* Action Bar */}
-      <div className="p-3.5 ebru-glass-card rounded-[24px] flex flex-col sm:flex-row items-center gap-3">
-        <button
-          onClick={() => handleRoundComplete()}
-          disabled={phase === 'evaluating'}
-          className="w-full sm:flex-1 py-4 px-6 rounded-[20px] btn-epic-turquoise font-bold text-base flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-        >
-          <Square className="w-5 h-5 fill-current" />
-          <span>
-            {phase === 'evaluating'
-              ? 'Analiz Ediliyor...'
-              : `Tekerlemeyi Bitirdim! (${elapsedSeconds.toFixed(1)} sn)`}
-          </span>
-        </button>
+      {/* Automatic Voice Detection Status Bar (no manual stop button) */}
+      <div className="p-3.5 ebru-glass-card rounded-[24px] flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="w-full sm:flex-1 flex items-center gap-3 px-2 py-1">
+          <div
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
+              phase === 'evaluating'
+                ? 'bg-[#FFBE0B]/20 border-[#FFBE0B]/50 text-[#FFBE0B]'
+                : 'bg-[#06D6A0]/20 border-[#06D6A0]/50 text-[#06D6A0]'
+            }`}
+          >
+            <Radio className={`w-5 h-5 ${phase === 'playing' ? 'animate-pulse' : ''}`} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+              <span>
+                {phase === 'evaluating'
+                  ? 'Okumanız Analiz Ediliyor...'
+                  : 'Otomatik Ses Takibi Aktif'}
+              </span>
+              <span className="text-[11px] font-mono text-[#FFBE0B] tabular-nums">
+                ({elapsedSeconds.toFixed(1)} sn)
+              </span>
+            </div>
+            <p className="text-[11px] text-[#93C5FD] truncate">{autoStopNote}</p>
+          </div>
+        </div>
 
         <button
           onClick={handleSimulateFastRead}
           disabled={phase === 'evaluating'}
-          className="w-full sm:w-auto px-4 py-3.5 rounded-[18px] bg-white/10 hover:bg-white/15 text-[#F8FAFC] border border-white/15 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+          className="w-full sm:w-auto px-4 py-3 rounded-[18px] bg-white/10 hover:bg-white/15 text-[#F8FAFC] border border-white/15 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
           title="Mikrofonunuz yoksa otomatik hızlı okuma simülasyonu çalıştırın"
         >
           <Zap className="w-4 h-4 text-[#FFBE0B]" />

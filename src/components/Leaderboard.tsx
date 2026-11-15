@@ -6,7 +6,8 @@ import { ComprehensiveStatsPanel } from './ComprehensiveStatsPanel';
 import { triggerCelebration } from './FxCanvas';
 import { claimMultiplayerWinReward, POINTS_PER_PLAYER_MULTIPLAYER_WIN } from '../firebase/authService';
 import { playTone } from '../utils/soundEffects';
-import { Trophy, RotateCcw, Star, Sparkles } from 'lucide-react';
+import { downloadDetailedTournamentPdf } from '../utils/pdfReport';
+import { Trophy, RotateCcw, Star, Sparkles, BarChart3, FileDown, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface LeaderboardProps {
   room: Room;
@@ -32,7 +33,25 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
 
   const [winRewardMessage, setWinRewardMessage] = useState<string | null>(null);
   const [winRewardError, setWinRewardError] = useState<string | null>(null);
+  const [showComprehensiveReport, setShowComprehensiveReport] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const claimedRef = useRef<string | null>(null);
+
+  const handleDownloadPdf = async () => {
+    if (isExportingPdf) return;
+    playTone('tap');
+    setPdfError(null);
+    setIsExportingPdf(true);
+    try {
+      await downloadDetailedTournamentPdf(room);
+    } catch (err) {
+      console.error('PDF export error:', err);
+      setPdfError('PDF raporu oluşturulurken bir sorun oluştu. Lütfen tekrar deneyin.');
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
 
   useEffect(() => {
     playTone('fanfare');
@@ -232,8 +251,50 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
         </div>
       </div>
 
-      {/* Comprehensive Performance Statistics & Bar Chart Panel */}
-      <ComprehensiveStatsPanel room={room} currentUserId={currentUserId} />
+      {/* Optional Comprehensive Report Toggle & PDF Export Controls */}
+      <div className="ebru-glass-card rounded-[24px] p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              playTone('tap');
+              setShowComprehensiveReport((prev) => !prev);
+            }}
+            className="flex-1 min-h-[46px] px-4 py-3 rounded-2xl bg-[#14213D]/90 hover:bg-[#3A86FF]/20 border border-[#3A86FF]/40 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+          >
+            <BarChart3 className="w-4 h-4 text-[#00F5D4] shrink-0" />
+            <span>
+              {showComprehensiveReport ? 'Kapsamlı Raporu Gizle' : 'Kapsamlı Raporu Göster'}
+            </span>
+            {showComprehensiveReport ? (
+              <ChevronUp className="w-4 h-4 text-[#93C5FD] shrink-0" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-[#93C5FD] shrink-0" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={isExportingPdf}
+            className="flex-1 min-h-[46px] px-4 py-3 rounded-2xl bg-gradient-to-r from-[#FFBE0B] to-[#F59E0B] hover:opacity-95 text-[#0d1629] text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-md transition-opacity cursor-pointer disabled:opacity-60"
+          >
+            <FileDown className="w-4 h-4 shrink-0" />
+            <span>{isExportingPdf ? 'PDF Hazırlanıyor...' : 'Ayrıntılı Raporu PDF İndir'}</span>
+          </button>
+        </div>
+
+        {pdfError && (
+          <div className="p-2.5 rounded-xl bg-[#FF006E]/20 border border-[#FF006E]/45 text-rose-100 text-xs text-center">
+            {pdfError}
+          </div>
+        )}
+      </div>
+
+      {/* Comprehensive Performance Statistics & Bar Chart Panel (Shown On Demand) */}
+      {showComprehensiveReport && (
+        <ComprehensiveStatsPanel room={room} currentUserId={currentUserId} />
+      )}
 
       {/* Actions */}
       <div className="flex flex-col sm:flex-row gap-3">

@@ -45,6 +45,7 @@ export function normalizeTurkish(text: string): string {
     .replace(/û/g, 'u')
     .replace(/['’]/g, '')
     .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?""“”…—]/g, ' ')
+    .replace(/([a-zçğıöşü])\1{2,}/g, '$1')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -98,12 +99,13 @@ const PHONETIC_CONFUSION_PAIRS = new Set<string>([
   'u:ü', 'ü:u',
   'c:ç', 'ç:c',
   's:ş', 'ş:s',
-  'g:ğ', 'ğ:g'
+  'g:ğ', 'ğ:g',
+  'ğ:y', 'y:ğ'
 ]);
 
 /**
  * Calculates Turkish-aware weighted Levenshtein similarity (0 to 1) between two words.
- * Softens common mobile ASR Turkish diacritic slips (ı/i, ö/o, ü/u, ğ/g) while keeping true errors distinct.
+ * Softens common mobile ASR Turkish diacritic slips (ı/i, ö/o, ü/u, ğ/g, ğ/y) while keeping true errors distinct.
  */
 export function wordSimilarity(w1: string, w2: string): number {
   if (!w1 && !w2) return 1;
@@ -123,7 +125,7 @@ export function wordSimilarity(w1: string, w2: string): number {
       const c2 = w2[j - 1];
       let cost = 0;
       if (c1 !== c2) {
-        cost = PHONETIC_CONFUSION_PAIRS.has(`${c1}:${c2}`) ? 0.35 : 1;
+        cost = PHONETIC_CONFUSION_PAIRS.has(`${c1}:${c2}`) ? 0.32 : 1;
       }
       dp[i][j] = Math.min(
         dp[i - 1][j] + 1,

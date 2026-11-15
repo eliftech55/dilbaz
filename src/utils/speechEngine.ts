@@ -100,6 +100,28 @@ function mergeSegmentsWithoutOverlap(prev: string, next: string): string {
 }
 
 /**
+ * Counts how well a candidate transcript matches the target vocabulary.
+ */
+function scoreTranscriptAgainstTarget(text: string, targetNormWords: string[]): number {
+  if (!text.trim() || targetNormWords.length === 0) return 0;
+  const candWords = splitWords(text);
+  if (candWords.length === 0) return 0;
+
+  let matchSum = 0;
+  for (const cw of candWords) {
+    let maxWordSim = 0;
+    for (const tw of targetNormWords) {
+      const sim = wordSimilarity(cw, tw);
+      if (sim > maxWordSim) maxWordSim = sim;
+    }
+    if (maxWordSim >= 0.68) {
+      matchSum += maxWordSim;
+    }
+  }
+  return matchSum;
+}
+
+/**
  * Evaluates ASR alternatives against the target tongue-twister vocabulary so out-of-vocabulary
  * Turkish tongue-twister words (kept in alt 1..4 on mobile) win over common-word autocorrects.
  */
@@ -119,18 +141,7 @@ function pickBestAlternative(result: any, targetNormWords: string[]): string {
     const candWords = splitWords(candidate);
     if (candWords.length === 0) continue;
 
-    let matchSum = 0;
-    for (const cw of candWords) {
-      let maxWordSim = 0;
-      for (const tw of targetNormWords) {
-        const sim = wordSimilarity(cw, tw);
-        if (sim > maxWordSim) maxWordSim = sim;
-      }
-      if (maxWordSim >= 0.7) {
-        matchSum += maxWordSim;
-      }
-    }
-
+    const matchSum = scoreTranscriptAgainstTarget(candidate, targetNormWords);
     // Small tie-breaker favoring primary hypothesis (a === 0)
     const score = matchSum / Math.max(1, candWords.length) + (a === 0 ? 0.04 : 0);
     if (score > bestScore) {
@@ -153,6 +164,9 @@ export class SpeechEngine {
   private pulseInterval: any = null;
   private lastActivityAt: number = 0;
   private firstAudioAt: number = 0;
+  private firstSpeechAt: number = 0;
+  private lastSpeechAt: number = 0;
+  private segmentMemory: Map<number, { text: string; targetScore: number }> = new Map();
   private pendingStopResolver: (() => void) | null = null;
   private isStoppingManually: boolean = false;
 
@@ -172,6 +186,9 @@ export class SpeechEngine {
     this.latestTranscript = '';
     this.lastActivityAt = 0;
     this.firstAudioAt = 0;
+    this.firstSpeechAt = 0;
+    this.lastSpeechAt = 0;
+    this.segmentMemory.clear();
     this.pendingStopResolver = null;
     this.isStoppingManually = false;
     this.targetNormWords = callbacks.targetText ? splitWords(callbacks.targetText) : [];
@@ -216,6 +233,7 @@ export class SpeechEngine {
   private initRecognitionInstance(SpeechRec: any, callbacks: SpeechEngineCallbacks) {
     if (!this.isListening) return;
 
+    this.segmentMemory.clear();
     const recognition = new SpeechRec();
     recognition.lang = 'tr-TR';
     recognition.continuous = true;
@@ -238,19 +256,34 @@ export class SpeechEngine {
       const now = Date.now();
       this.lastActivityAt = now;
       if (!this.firstAudioAt) this.firstAudioAt = now;
+      if (!this.firstSpeechAt) this.firstSpeechAt = now;
     };
 
     recognition.onresult = (event: any) => {
       const now = Date.now();
       this.lastActivityAt = now;
       if (!this.firstAudioAt) this.firstAudioAt = now;
+
       let finalBuf = '';
       let interimBuf = '';
 
       for (let i = 0; i < event.results.length; i++) {
         const result = event.results[i];
-        const piece = pickBestAlternative(result, this.targetNormWords);
+        let piece = pickBestAlternative(result, this.targetNormWords);
         if (!piece) continue;
+
+        // Android Chrome 2nd-pass isFinal rescorer often drops or corrupts out-of-vocabulary
+        // tongue-twister words that interim hypotheses recognized correctly. Keep whichever
+        // version has significantly better target coverage for this result index.
+        if (this.targetNormWords.length > 0) {
+          const pieceScore = scoreTranscriptAgainstTarget(piece, this.targetNormWords);
+          const prevSeg = this.segmentMemory.get(i);
+          if (prevSeg && prevSeg.targetScore > pieceScore + 0.65) {
+            piece = prevSeg.text;
+          } else {
+            this.segmentMemory.set(i, { text: piece, targetScore: pieceScore });
+          }
+        }
 
         if (result.isFinal) {
           finalBuf = mergeSegmentsWithoutOverlap(finalBuf, piece);
@@ -264,6 +297,13 @@ export class SpeechEngine {
 
       let combined = mergeSegmentsWithoutOverlap(this.committedTranscript, this.sessionFinal);
       combined = mergeSegmentsWithoutOverlap(combined, this.sessionInterim);
+
+      if (combined.trim()) {
+        if (!this.firstSpeechAt) this.firstSpeechAt = now;
+        if (combined !== this.latestTranscript) {
+          this.lastSpeechAt = now;
+        }
+      }
 
       this.latestTranscript = combined;
       callbacks.onTranscriptChange(combined, !this.sessionInterim);
@@ -304,8 +344,7 @@ export class SpeechEngine {
       }
 
       if (this.isListening && !this.isStoppingManually) {
-        // Mobile Chrome needs slightly longer gap before restarting audio capture
-        const restartDelay = isMobileBrowser() ? 240 : 80;
+        const restartDelay = isMobileBrowser() ? 140 : 60;
         setTimeout(() => {
           if (this.isListening && !this.isStoppingManually) {
             try {
@@ -329,15 +368,48 @@ export class SpeechEngine {
   }
 
   /**
-   * Returns an effective start timestamp compensated for mobile microphone initialization lag
-   * (up to 1.8s) so mobile and desktop browsers evaluate reading speed fairly.
+   * Returns fair [startMs, endMs] speaking bounds so mobile mic warm-up lag and
+   * post-speech silence auto-stop wait time never inflate reading duration.
+   */
+  public getSpeakingBounds(
+    fallbackStartMs: number,
+    fallbackEndMs: number = Date.now()
+  ): { startMs: number; endMs: number } {
+    const mobile = isMobileBrowser();
+    const maxLag = mobile ? 2400 : 1400;
+
+    // Prefer true speech onset (minus natural onset cushion) over silent onaudiostart
+    const rawOnset =
+      this.firstSpeechAt > fallbackStartMs
+        ? Math.max(fallbackStartMs, this.firstSpeechAt - 280)
+        : this.firstAudioAt > fallbackStartMs
+        ? this.firstAudioAt
+        : fallbackStartMs;
+
+    const lag = Math.max(0, Math.min(maxLag, rawOnset - fallbackStartMs));
+    const startMs = fallbackStartMs + lag;
+
+    // Trim trailing silence detection delay & ASR finalization latency
+    const endMs =
+      this.lastSpeechAt > startMs + 400
+        ? Math.min(fallbackEndMs, this.lastSpeechAt + 320)
+        : fallbackEndMs;
+
+    return {
+      startMs,
+      endMs: Math.max(startMs + 800, endMs)
+    };
+  }
+
+  /**
+   * Returns an effective start timestamp compensated for mobile microphone initialization lag.
    */
   public getEffectiveStartTime(fallbackStartMs: number): number {
-    if (!this.firstAudioAt || this.firstAudioAt <= fallbackStartMs) {
-      return fallbackStartMs;
-    }
-    const lag = Math.min(1800, this.firstAudioAt - fallbackStartMs);
-    return fallbackStartMs + lag;
+    return this.getSpeakingBounds(fallbackStartMs).startMs;
+  }
+
+  public getLastSpeechTimestamp(): number {
+    return this.lastSpeechAt;
   }
 
   /**

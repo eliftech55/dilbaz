@@ -309,6 +309,7 @@ export async function sendFriendRequestByEmail(params: {
         body: `${payload.requesterName} seninle Dilbaz kelime düelloları yapmak için arkadaşlık teklif etti.`,
         tag: `friend_${friendshipId}`,
         tab: 'friends',
+        badgeCount: 1,
         idToken
       });
     });
@@ -422,6 +423,7 @@ export async function sendRoomInviteToFriend(params: {
         tag: `invite_${inviteId}`,
         roomCode: params.roomCode,
         tab: 'room',
+        badgeCount: 1,
         idToken
       });
     });
@@ -476,6 +478,7 @@ export async function respondToRoomInvite(
           body: `${responder}, ${cleanCode} odası davetini kabul etmedi. Gerekirse tekrar davet edebilirsin.`,
           tag: `invite_declined_${inviteId}`,
           tab: 'friends',
+          badgeCount: 1,
           idToken
         });
       });
