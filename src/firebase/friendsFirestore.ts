@@ -410,3 +410,21 @@ export async function respondToRoomInvite(
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
 }
+
+export function subscribeToSentRoomInvites(
+  uid: string,
+  onUpdate: (invites: RoomInvite[]) => void
+): () => void {
+  const q = query(collection(db, 'roomInvites'), where('senderUid', '==', uid));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => d.data() as RoomInvite);
+      list.sort((a, b) => b.updatedAt - a.updatedAt);
+      onUpdate(list);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'roomInvites');
+    }
+  );
+}

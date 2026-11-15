@@ -39,6 +39,7 @@ interface FriendsPanelProps {
   userProfile: UserProfile | null;
   friendships: Friendship[];
   incomingInvites: RoomInvite[];
+  sentInvites?: RoomInvite[];
   invitedRoomsInfo?: Record<string, InvitedRoomStatusInfo>;
   activeRoom: Room | null;
   onOpenAuth: () => void;
@@ -53,6 +54,7 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
   userProfile,
   friendships,
   incomingInvites,
+  sentInvites = [],
   invitedRoomsInfo = {},
   activeRoom,
   onOpenAuth,
@@ -549,13 +551,28 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
               const isInActiveRoom = Boolean(
                 activeRoom?.players.some((p) => p.id === friend.uid)
               );
-              const isInvitedNow = Boolean(invitedFriendIds[friend.uid]);
+              const latestInviteForFriend =
+                (activeRoom
+                  ? sentInvites.find(
+                      (inv) => inv.recipientUid === friend.uid && inv.roomCode === activeRoom.code
+                    )
+                  : undefined) || sentInvites.find((inv) => inv.recipientUid === friend.uid);
+
+              const wasDeclined = latestInviteForFriend?.status === 'dismissed';
+              const isPendingInvite =
+                latestInviteForFriend?.status === 'pending' &&
+                (!activeRoom || latestInviteForFriend.roomCode === activeRoom.code);
+              const isInvitedNow = Boolean(invitedFriendIds[friend.uid]) || isPendingInvite;
               const isConfirmingRemove = confirmRemoveId === friend.friendshipId;
 
               return (
                 <div
                   key={friend.friendshipId}
-                  className="p-3.5 rounded-2xl bg-[#0d1629]/85 border border-white/12 flex flex-col justify-between gap-3"
+                  className={`p-3.5 rounded-2xl border flex flex-col justify-between gap-3 ${
+                    wasDeclined && !isInActiveRoom
+                      ? 'bg-[#FF006E]/10 border-[#FF006E]/40'
+                      : 'bg-[#0d1629]/85 border-white/12'
+                  }`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-3 min-w-0">
@@ -564,7 +581,17 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
                         <div className="text-sm font-bold text-white truncate">
                           {friend.name}
                         </div>
-                        <div className="text-[11px] text-[#06D6A0]">Arkadaş</div>
+                        {wasDeclined && !isInActiveRoom ? (
+                          <div className="text-[11px] text-rose-300 font-semibold">
+                            {latestInviteForFriend?.roomCode} davetini kabul etmedi
+                          </div>
+                        ) : isInvitedNow && !isInActiveRoom ? (
+                          <div className="text-[11px] text-[#06D6A0]">
+                            Davet gönderildi · Yanıt bekleniyor
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-[#06D6A0]">Arkadaş</div>
+                        )}
                       </div>
                     </div>
 
@@ -608,8 +635,10 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
                       disabled={busy}
                       onClick={() => handleInviteOrCreate(friend.uid, friend.name)}
                       className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all disabled:opacity-50 ${
-                        isInvitedNow
-                          ? 'bg-[#06D6A0]/20 border border-[#06D6A0]/45 text-[#06D6A0]'
+                        wasDeclined
+                          ? 'bg-gradient-to-r from-[#FF006E] to-[#FFBE0B] text-white hover:opacity-95'
+                          : isInvitedNow
+                          ? 'bg-[#06D6A0]/20 hover:bg-[#06D6A0]/30 border border-[#06D6A0]/45 text-[#06D6A0]'
                           : 'bg-gradient-to-r from-[#3A86FF] to-[#FF006E] text-white hover:opacity-95'
                       }`}
                     >
@@ -617,8 +646,10 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
                       <span>
                         {busy
                           ? 'Gönderiliyor...'
-                          : isInvitedNow
-                          ? 'Davet Gönderildi ✓'
+                          : wasDeclined || isInvitedNow
+                          ? activeRoom && activeRoom.status === 'waiting'
+                            ? 'Tekrar Davet Et'
+                            : 'Yeni Oda Kur & Tekrar Davet Et'
                           : activeRoom && activeRoom.status === 'waiting'
                           ? 'Aktif Odaya Davet Et'
                           : 'Oda Kur & Davet Et'}

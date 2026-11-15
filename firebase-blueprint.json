@@ -15,11 +15,19 @@
         },
         "hostId": {
           "type": "string",
-          "description": "ID of host player"
+          "description": "ID of current active host player"
+        },
+        "originalHostId": {
+          "type": "string",
+          "description": "ID of the player who originally created the room"
         },
         "hostName": {
           "type": "string",
           "description": "Display name of host"
+        },
+        "hostLeftAutoMode": {
+          "type": "boolean",
+          "description": "True when original host left mid-game so the room continues automatically"
         },
         "status": {
           "type": "string",
@@ -33,6 +41,10 @@
           "type": "number",
           "description": "Total rounds in this tournament"
         },
+        "settings": {
+          "type": "object",
+          "description": "Room settings including roundCount, timeLimitSeconds, difficulty, category, progressionMode"
+        },
         "currentTekerleme": {
           "type": "object",
           "description": "Active tongue twister for this round"
@@ -40,6 +52,10 @@
         "players": {
           "type": "array",
           "description": "List of players currently in this room"
+        },
+        "participantIds": {
+          "type": "array",
+          "description": "IDs of human participants who joined or created this room for active room rejoining"
         },
         "roundScores": {
           "type": "object",

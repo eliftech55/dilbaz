@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { Room, Difficulty, PhonemeCategory, UserProfile, RoomInvite } from '../types/game';
+import { Room, Difficulty, PhonemeCategory, UserProfile, RoomInvite, RoomProgressionMode } from '../types/game';
 import { MascotDialogue } from './DilbazMascot';
 import { KILIM_MOTIFS, KilimAvatar, getKilimMotif } from './KilimAvatar';
 import { AppTab } from './Navbar';
@@ -27,7 +27,10 @@ import {
   Swords,
   Send,
   X,
-  Clock
+  Clock,
+  Crown,
+  Zap,
+  RotateCcw
 } from 'lucide-react';
 
 interface RoomLobbyProps {
@@ -40,6 +43,8 @@ interface RoomLobbyProps {
   userProfile?: UserProfile | null;
   friends?: { uid: string; name: string; avatar: string }[];
   incomingInvites?: RoomInvite[];
+  sentInvites?: RoomInvite[];
+  rejoinableRooms?: Room[];
   invitedRoomsInfo?: Record<string, InvitedRoomStatusInfo>;
   pendingFriendsCount?: number;
   onOpenAuth?: () => void;
@@ -51,6 +56,7 @@ interface RoomLobbyProps {
     roundCount: number;
     difficulty: 'karisik' | Difficulty;
     category: PhonemeCategory;
+    progressionMode: RoomProgressionMode;
     creatorName: string;
     creatorAvatar: string;
   }) => void;
@@ -78,6 +84,8 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
   userProfile = null,
   friends = [],
   incomingInvites = [],
+  sentInvites = [],
+  rejoinableRooms = [],
   invitedRoomsInfo = {},
   pendingFriendsCount = 0,
   onOpenAuth,
@@ -96,7 +104,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
   const initialMotif =
     getKilimMotif(userProfile?.avatar || currentUser.avatar) || KILIM_MOTIFS[0];
 
-  const [viewMode, setViewMode] = useState<'options' | 'create' | 'join'>(
+  const [viewMode, setViewMode] = useState<'options' | 'create' | 'join' | 'active_rooms'>(
     initialCode ? 'join' : 'options'
   );
   const [joinCode, setJoinCode] = useState(initialCode);
@@ -135,6 +143,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
   const [roundCount, setRoundCount] = useState(3);
   const [difficulty, setDifficulty] = useState<'karisik' | Difficulty>('karisik');
   const [category] = useState<PhonemeCategory>('tum');
+  const [progressionMode, setProgressionMode] = useState<RoomProgressionMode>('host');
 
   const activeMotif = getKilimMotif(selectedAvatar) || KILIM_MOTIFS[0];
 
@@ -495,6 +504,79 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
           </div>
         )}
 
+        {/* Quick Rejoin Banner for Active Rooms (when user or host left mid-game) */}
+        {viewMode === 'options' && rejoinableRooms.length > 0 && (
+          <div className="p-4 rounded-[24px] bg-gradient-to-r from-[#06D6A0]/18 via-[#3A86FF]/20 to-[#FFBE0B]/15 border-2 border-[#00F5D4]/60 space-y-2.5 shadow-lg">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-display font-bold text-[#00F5D4] flex items-center gap-1.5">
+                <RotateCcw className="w-4 h-4" />
+                <span>Devam Eden Aktif Odaların ({rejoinableRooms.length})</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  playTone('tap');
+                  setViewMode('active_rooms');
+                }}
+                className="text-[11px] font-bold text-[#FFBE0B] hover:underline cursor-pointer"
+              >
+                Tümünü Gör &rarr;
+              </button>
+            </div>
+            {rejoinableRooms.slice(0, 2).map((r) => {
+              const isMyCreatedRoom = (r.originalHostId || r.hostId) === currentUser.id;
+              const statusLabel =
+                r.status === 'waiting'
+                  ? 'Lobide Bekliyor'
+                  : r.status === 'round_result'
+                  ? `Tur ${r.currentRound}/${r.totalRounds} Sonuçları`
+                  : `Tur ${r.currentRound}/${r.totalRounds} Devam Ediyor`;
+
+              return (
+                <div
+                  key={r.code}
+                  className="p-3 rounded-2xl bg-[#0d1629]/85 border border-white/12 flex flex-wrap items-center justify-between gap-2.5"
+                >
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
+                      <span className="truncate">{r.title}</span>
+                      <span className="font-mono text-[#FFBE0B]">{r.code}</span>
+                      {isMyCreatedRoom && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FFBE0B]/20 text-[#FFBE0B] font-bold">
+                          Kurucu
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-[#93C5FD] flex flex-wrap items-center gap-2">
+                      <span>{statusLabel}</span>
+                      <span>·</span>
+                      <span>{r.players.length} Oyuncu</span>
+                      <span>·</span>
+                      <span>
+                        {r.settings?.progressionMode === 'auto' || r.hostLeftAutoMode
+                          ? 'Otomatik İlerleme'
+                          : 'Kurucu Yönetiminde'}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => {
+                      playTone('tap');
+                      onJoinRoom(r.code, playerName.trim() || activeMotif.name, selectedAvatar);
+                    }}
+                    className="px-4 py-2 rounded-xl btn-epic-turquoise text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-50"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Oyuna Devam Et</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Room Options Card */}
         {viewMode === 'options' && (
           <section className="ebru-glass-card rounded-[26px] p-4 sm:p-5 space-y-3">
@@ -514,7 +596,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                     Oda Kur (Öğretmen / Kurucu)
                   </div>
                   <div className="text-xs text-[#CBD5E1] mt-0.5">
-                    PIN kodunu oluşturun, öğrencilerle aynı anda yarışın.
+                    PIN kodunu oluşturun, kurucu yönetiminde veya otomatik ilerleme ile yarışın.
                   </div>
                 </div>
                 <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#06D6A0]/20 text-[#06D6A0] border border-[#06D6A0]/40 shrink-0">
@@ -542,6 +624,30 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                 </div>
                 <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#3A86FF]/25 text-[#93C5FD] border border-[#3A86FF]/45 shrink-0">
                   KATIL
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  playTone('tap');
+                  setViewMode('active_rooms');
+                }}
+                className="w-full flex items-center gap-3.5 p-4 rounded-[20px] bg-gradient-to-r from-[#06D6A0]/15 to-[#FFBE0B]/15 border border-[#06D6A0]/45 hover:-translate-y-0.5 transition-all text-left shadow-lg shadow-[#06D6A0]/10 cursor-pointer group"
+              >
+                <div className="w-11 h-11 rounded-[14px] bg-gradient-to-br from-[#06D6A0] to-[#FFBE0B] text-[#0d1629] flex items-center justify-center font-display font-bold text-xl shrink-0 shadow-md shadow-[#06D6A0]/30 group-hover:scale-105 transition-transform">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-display text-base font-bold text-white">
+                    Aktif Odalar (Oyuna Devam Et)
+                  </div>
+                  <div className="text-xs text-[#CBD5E1] mt-0.5">
+                    Çıktığın veya yarım kalan aktif odalara kaldığın puandan tekrar katıl.
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#FFBE0B]/20 text-[#FFBE0B] border border-[#FFBE0B]/45 shrink-0">
+                  {rejoinableRooms.length > 0 ? `${rejoinableRooms.length} AKTİF` : 'LİSTE'}
                 </span>
               </button>
             </div>
@@ -631,6 +737,53 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
               </div>
             </div>
 
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-[#CBD5E1]">Oyun İlerleme Modu</label>
+              <div className="grid sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTone('tap');
+                    setProgressionMode('host');
+                  }}
+                  className={`p-3 rounded-2xl text-left border transition-all cursor-pointer ${
+                    progressionMode === 'host'
+                      ? 'bg-[#3A86FF]/25 border-2 border-[#FFBE0B] text-white shadow-md'
+                      : 'bg-[#0d1629]/80 border-white/10 text-[#CBD5E1] hover:border-white/25'
+                  }`}
+                >
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    <Crown className="w-4 h-4 text-[#FFBE0B]" />
+                    <span>Kurucu Yönetiminde</span>
+                  </div>
+                  <p className="text-[11px] text-[#94A3B8] mt-1 leading-snug">
+                    Turları ve geçişleri oda kurucusu başlatır. Kurucu çıkarsa oyun otomatik devam eder.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTone('tap');
+                    setProgressionMode('auto');
+                  }}
+                  className={`p-3 rounded-2xl text-left border transition-all cursor-pointer ${
+                    progressionMode === 'auto'
+                      ? 'bg-[#06D6A0]/20 border-2 border-[#00F5D4] text-white shadow-md'
+                      : 'bg-[#0d1629]/80 border-white/10 text-[#CBD5E1] hover:border-white/25'
+                  }`}
+                >
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    <Zap className="w-4 h-4 text-[#00F5D4]" />
+                    <span>Otomatik İlerleme</span>
+                  </div>
+                  <p className="text-[11px] text-[#94A3B8] mt-1 leading-snug">
+                    Oyuncular okumasını tamamladıkça turlar beklemeden otomatik olarak ilerler.
+                  </p>
+                </button>
+              </div>
+            </div>
+
             <button
               onClick={() => {
                 playTone('tap');
@@ -638,6 +791,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                   roundCount,
                   difficulty,
                   category,
+                  progressionMode,
                   creatorName: playerName.trim() || activeMotif.name,
                   creatorAvatar: selectedAvatar
                 });
@@ -647,6 +801,115 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
             >
               {isLoading ? 'Oda Oluşturuluyor...' : 'ODAYI BAŞLAT VE CANLI PIN AL'}
             </button>
+          </div>
+        )}
+
+        {/* ACTIVE ROOMS LIST */}
+        {viewMode === 'active_rooms' && (
+          <div className="p-6 ebru-glass-card rounded-[28px] space-y-4 animate-screen-in">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
+                <RotateCcw className="w-5 h-5 text-[#00F5D4]" />
+                <span>Aktif Odalar ({rejoinableRooms.length})</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  playTone('tap');
+                  setViewMode('options');
+                }}
+                className="text-xs text-[#93C5FD] hover:text-white cursor-pointer"
+              >
+                Geri Dön
+              </button>
+            </div>
+
+            {rejoinableRooms.length === 0 ? (
+              <div className="p-6 rounded-2xl bg-[#0d1629]/75 border border-white/10 text-center space-y-3">
+                <p className="text-xs text-[#CBD5E1]">
+                  Şu an katılabileceğin devam eden veya yarım kalmış bir oda bulunmuyor.
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTone('tap');
+                      setViewMode('create');
+                    }}
+                    className="px-4 py-2 rounded-xl btn-epic-pomegranate text-xs font-bold cursor-pointer"
+                  >
+                    Yeni Oda Kur
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTone('tap');
+                      setViewMode('join');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-white cursor-pointer"
+                  >
+                    PIN ile Katıl
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {rejoinableRooms.map((r) => {
+                  const isOriginalCreator = (r.originalHostId || r.hostId) === currentUser.id;
+                  const statusLabel =
+                    r.status === 'waiting'
+                      ? 'Lobide Bekliyor'
+                      : r.status === 'round_result'
+                      ? `Tur ${r.currentRound}/${r.totalRounds} Sonuçları`
+                      : `Tur ${r.currentRound}/${r.totalRounds} Devam Ediyor`;
+
+                  return (
+                    <div
+                      key={r.code}
+                      className="p-4 rounded-2xl bg-[#0d1629]/85 border border-[#00F5D4]/30 flex flex-wrap items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-bold text-white truncate">{r.title}</span>
+                          <span className="text-xs font-mono font-bold text-[#FFBE0B] px-2 py-0.5 rounded bg-[#FFBE0B]/15">
+                            {r.code}
+                          </span>
+                          {isOriginalCreator && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#FFBE0B]/20 text-[#FFBE0B] border border-[#FFBE0B]/40 font-bold">
+                              Oda Kurucususun
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-[#93C5FD] flex flex-wrap items-center gap-2">
+                          <span className="text-[#06D6A0] font-semibold">{statusLabel}</span>
+                          <span>·</span>
+                          <span>{r.players.length} Aktif Oyuncu</span>
+                          <span>·</span>
+                          <span>
+                            {r.settings?.progressionMode === 'auto' || r.hostLeftAutoMode
+                              ? 'Otomatik İlerleme'
+                              : 'Kurucu Yönetiminde'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={isLoading}
+                        onClick={() => {
+                          playTone('tap');
+                          onJoinRoom(r.code, playerName.trim() || activeMotif.name, selectedAvatar);
+                        }}
+                        className="px-4 py-2.5 rounded-xl btn-epic-turquoise text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-50"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>{r.status === 'waiting' ? 'Lobiye Dön' : 'Oyuna Devam Et'}</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -802,6 +1065,11 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
           <span className="px-3 py-1 rounded-full bg-white/5 border border-white/12 text-[#CBD5E1]">
             ⏱️ Süre: <strong className="text-white">{room.settings.timeLimitSeconds} sn</strong>
           </span>
+          <span className="px-3 py-1 rounded-full bg-[#3A86FF]/15 border border-[#3A86FF]/35 text-[#93C5FD] font-semibold">
+            {room.settings?.progressionMode === 'auto'
+              ? '⚡ Otomatik İlerleme'
+              : '👑 Kurucu Yönetiminde'}
+          </span>
           <span className="px-3 py-1 rounded-full bg-[#FFBE0B]/15 border border-[#FFBE0B]/35 text-[#FFBE0B] flex items-center gap-1.5 font-semibold">
             <Sparkles className="w-3 h-3" />{' '}
             {room.players.length >= 2
@@ -934,16 +1202,36 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
             <div className="grid sm:grid-cols-2 gap-2.5">
               {friends.map((f) => {
                 const alreadyInRoom = room.players.some((p) => p.id === f.uid);
-                const alreadyInvited = Boolean(invitedFriendUids[f.uid]);
+                const sentInvite = sentInvites.find(
+                  (inv) => inv.roomCode === room.code && inv.recipientUid === f.uid
+                );
+                const wasDeclined = sentInvite?.status === 'dismissed';
+                const isPending = sentInvite?.status === 'pending' || Boolean(invitedFriendUids[f.uid]);
                 const isSending = invitingFriendUid === f.uid;
                 return (
                   <div
                     key={f.uid}
-                    className="p-3 rounded-2xl bg-[#0d1629]/85 border border-white/10 flex items-center justify-between gap-2.5"
+                    className={`p-3 rounded-2xl border flex items-center justify-between gap-2.5 ${
+                      wasDeclined
+                        ? 'bg-[#FF006E]/10 border-[#FF006E]/40'
+                        : 'bg-[#0d1629]/85 border-white/10'
+                    }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <KilimAvatar avatar={f.avatar} size={34} />
-                      <span className="text-xs font-bold text-white truncate">{f.name}</span>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-white truncate">{f.name}</div>
+                        {!alreadyInRoom && wasDeclined && (
+                          <div className="text-[10px] text-rose-300 font-semibold">
+                            Daveti kabul etmedi
+                          </div>
+                        )}
+                        {!alreadyInRoom && !wasDeclined && isPending && (
+                          <div className="text-[10px] text-[#06D6A0] font-semibold">
+                            Davet gönderildi · Yanıt bekleniyor
+                          </div>
+                        )}
+                      </div>
                     </div>
                     {alreadyInRoom ? (
                       <span className="text-[11px] font-bold text-[#06D6A0] shrink-0">
@@ -965,15 +1253,17 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
                           }
                         }}
                         className={`px-3 py-1.5 rounded-xl text-[11px] font-bold shrink-0 cursor-pointer transition-all disabled:opacity-50 ${
-                          alreadyInvited
-                            ? 'bg-[#06D6A0]/20 text-[#06D6A0] border border-[#06D6A0]/40'
+                          wasDeclined
+                            ? 'bg-gradient-to-r from-[#FF006E] to-[#FFBE0B] text-white'
+                            : isPending
+                            ? 'bg-[#06D6A0]/20 hover:bg-[#06D6A0]/30 text-[#06D6A0] border border-[#06D6A0]/40'
                             : 'bg-gradient-to-r from-[#3A86FF] to-[#FF006E] text-white'
                         }`}
                       >
                         {isSending
                           ? 'Gönderiliyor...'
-                          : alreadyInvited
-                          ? 'Davet Gönderildi ✓'
+                          : wasDeclined || isPending
+                          ? 'Tekrar Davet Et'
                           : 'Davet Et'}
                       </button>
                     )}

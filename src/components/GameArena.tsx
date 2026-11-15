@@ -6,7 +6,7 @@ import { AudioVisualizer } from './AudioVisualizer';
 import { WordComparison } from './WordComparison';
 import { MascotDialogue } from './DilbazMascot';
 import { playTone, playComboWordTone } from '../utils/soundEffects';
-import { Square, Volume2, Timer, Zap, Mic } from 'lucide-react';
+import { Square, Volume2, Timer, Zap, Mic, LogOut } from 'lucide-react';
 
 interface WordBurstEffect {
   id: string;
@@ -34,6 +34,7 @@ interface GameArenaProps {
   currentUser: { id: string; name: string; avatar: string };
   isHost?: boolean;
   onFinishRound: (result: PlayerScore) => void;
+  onLeaveRoom?: () => void;
 }
 
 export const GameArena: React.FC<GameArenaProps> = ({
@@ -43,7 +44,8 @@ export const GameArena: React.FC<GameArenaProps> = ({
   timeLimitSeconds,
   currentUser,
   isHost = false,
-  onFinishRound
+  onFinishRound,
+  onLeaveRoom
 }) => {
   const [phase, setPhase] = useState<'countdown' | 'playing' | 'evaluating'>('countdown');
   const [countdownNum, setCountdownNum] = useState(3);
@@ -59,6 +61,7 @@ export const GameArena: React.FC<GameArenaProps> = ({
   const [justMatchedIndices, setJustMatchedIndices] = useState<number[]>([]);
   const [liveWordScore, setLiveWordScore] = useState(0);
   const [scorePopKey, setScorePopKey] = useState(0);
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   const speechEngineRef = useRef<SpeechEngine | null>(null);
   const timerIntervalRef = useRef<any>(null);
@@ -605,6 +608,57 @@ export const GameArena: React.FC<GameArenaProps> = ({
           <span>Simüle Hızlı Oku</span>
         </button>
       </div>
+
+      {onLeaveRoom && (
+        <div className="flex items-center justify-center">
+          {!confirmLeave ? (
+            <button
+              type="button"
+              onClick={() => {
+                playTone('tap');
+                setConfirmLeave(true);
+              }}
+              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-semibold text-[#94A3B8] hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Odadan Çık (Oyun Devam Etsin)</span>
+            </button>
+          ) : (
+            <div className="p-2.5 rounded-2xl bg-[#0d1629]/90 border border-[#FF006E]/45 flex flex-wrap items-center justify-center gap-2 text-xs">
+              <span className="text-[#FDE68A] font-medium">
+                {isHost
+                  ? 'Kurucu çıksa da oyun diğer oyuncular için otomatik devam eder. Çıkmak istiyor musun?'
+                  : 'Odadan çıkarsan Aktif Odalar bölümünden tekrar katılabilirsin.'}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  playTone('tap');
+                  clearEffectTimers();
+                  if (timerIntervalRef.current) {
+                    clearInterval(timerIntervalRef.current);
+                    timerIntervalRef.current = null;
+                  }
+                  if (speechEngineRef.current) {
+                    speechEngineRef.current.stop();
+                  }
+                  onLeaveRoom();
+                }}
+                className="px-3 py-1.5 rounded-xl bg-[#FF006E] hover:bg-[#FF006E]/90 text-white font-bold cursor-pointer"
+              >
+                Evet, Çık
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmLeave(false)}
+                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-[#CBD5E1] font-semibold cursor-pointer"
+              >
+                Vazgeç
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

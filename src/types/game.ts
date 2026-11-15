@@ -81,24 +81,31 @@ export interface PlayerScore {
 
 export type RoomStatus = 'waiting' | 'countdown' | 'in_round' | 'round_result' | 'game_over' | 'closed';
 
+export type RoomProgressionMode = 'host' | 'auto';
+
 export interface RoomSettings {
   roundCount: number;
   timeLimitSeconds: number;
   difficulty: 'karisik' | Difficulty;
   category: PhonemeCategory;
+  progressionMode?: RoomProgressionMode;
 }
 
 export interface Room {
   code: string;
   title: string;
   hostId: string;
+  originalHostId?: string;
   hostName: string;
+  hostLeftAutoMode?: boolean;
   status: RoomStatus;
   currentRound: number;
   totalRounds: number;
   settings: RoomSettings;
   currentTekerleme?: Tekerleme;
   winnerId?: string;
+  participantIds?: string[];
+  updatedAt?: number;
   players: {
     id: string;
     name: string;

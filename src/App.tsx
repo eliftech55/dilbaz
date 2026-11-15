@@ -9,7 +9,8 @@ import {
   UserProfile,
   UserNotification,
   Friendship,
-  RoomInvite
+  RoomInvite,
+  RoomProgressionMode
 } from './types/game';
 import { INITIAL_TEKERLEMELER } from './data/tekerlemeler';
 import { RoomFirestore } from './firebase/roomFirestore';
@@ -39,6 +40,7 @@ import {
   syncMyEmailDirectory,
   subscribeToMyFriendships,
   subscribeToMyRoomInvites,
+  subscribeToSentRoomInvites,
   sendRoomInviteToFriend,
   respondToRoomInvite,
   InvitedRoomStatusInfo,
@@ -93,13 +95,20 @@ export default function App() {
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [friendships, setFriendships] = useState<Friendship[]>([]);
   const [roomInvites, setRoomInvites] = useState<RoomInvite[]>([]);
+  const [sentInvites, setSentInvites] = useState<RoomInvite[]>([]);
+  const [declinedInviteAlerts, setDeclinedInviteAlerts] = useState<
+    { id: string; invite: RoomInvite; friendName: string }[]
+  >([]);
   const [invitedRoomsInfo, setInvitedRoomsInfo] = useState<Record<string, InvitedRoomStatusInfo>>({});
   const seenNotifIdsRef = useRef<Set<string>>(new Set());
   const seenFriendReqIdsRef = useRef<Set<string>>(new Set());
   const seenInviteKeysRef = useRef<Set<string>>(new Set());
+  const seenDismissedInviteKeysRef = useRef<Set<string>>(new Set());
   const notifiedRoomEndKeysRef = useRef<Set<string>>(new Set());
   const initialFriendshipsLoadedRef = useRef<boolean>(false);
   const initialInvitesLoadedRef = useRef<boolean>(false);
+  const initialSentInvitesLoadedRef = useRef<boolean>(false);
+  const friendshipsRef = useRef<Friendship[]>([]);
 
   // Intro video splash state (skip automatically if joining directly via ?oda= link)
   const [showIntro, setShowIntro] = useState<boolean>(() => {
@@ -229,6 +238,7 @@ export default function App() {
     let unsubNotifs: (() => void) | null = null;
     let unsubFriends: (() => void) | null = null;
     let unsubInvites: (() => void) | null = null;
+    let unsubSentInvites: (() => void) | null = null;
 
     consumeGoogleRedirectResult();
     const unsubAuth = subscribeToAuth(async (user) => {
@@ -249,11 +259,17 @@ export default function App() {
         unsubInvites();
         unsubInvites = null;
       }
+      if (unsubSentInvites) {
+        unsubSentInvites();
+        unsubSentInvites = null;
+      }
 
       initialFriendshipsLoadedRef.current = false;
       initialInvitesLoadedRef.current = false;
+      initialSentInvitesLoadedRef.current = false;
       seenFriendReqIdsRef.current.clear();
       seenInviteKeysRef.current.clear();
+      seenDismissedInviteKeysRef.current.clear();
 
       if (!user) {
         setUserProfile(null);
@@ -263,7 +279,10 @@ export default function App() {
         setAdminContributions([]);
         setNotifications([]);
         setFriendships([]);
+        friendshipsRef.current = [];
         setRoomInvites([]);
+        setSentInvites([]);
+        setDeclinedInviteAlerts([]);
         return;
       }
 
@@ -297,6 +316,7 @@ export default function App() {
       });
 
       unsubFriends = subscribeToMyFriendships(user.uid, (list) => {
+        friendshipsRef.current = list;
         setFriendships(list);
         const incomingPending = list.filter(
           (f) => f.status === 'pending' && f.recipientUid === user.uid
@@ -369,6 +389,56 @@ export default function App() {
           }
         }
       });
+
+      unsubSentInvites = subscribeToSentRoomInvites(user.uid, (list) => {
+        setSentInvites(list);
+        const dismissedList = list.filter((inv) => inv.status === 'dismissed');
+
+        if (!initialSentInvitesLoadedRef.current) {
+          initialSentInvitesLoadedRef.current = true;
+          dismissedList.forEach((inv) =>
+            seenDismissedInviteKeysRef.current.add(`${inv.id}_${inv.updatedAt}`)
+          );
+          return;
+        }
+
+        // Remove alerts for invites that were re-sent or accepted
+        const activeOrAcceptedIds = new Set(
+          list.filter((inv) => inv.status !== 'dismissed').map((inv) => inv.id)
+        );
+        if (activeOrAcceptedIds.size > 0) {
+          setDeclinedInviteAlerts((prev) =>
+            prev.filter((alert) => !activeOrAcceptedIds.has(alert.invite.id))
+          );
+        }
+
+        for (const inv of dismissedList) {
+          const key = `${inv.id}_${inv.updatedAt}`;
+          if (!seenDismissedInviteKeysRef.current.has(key)) {
+            seenDismissedInviteKeysRef.current.add(key);
+            const matchedFriendship = friendshipsRef.current.find(
+              (f) => f.requesterUid === inv.recipientUid || f.recipientUid === inv.recipientUid
+            );
+            const friendName = matchedFriendship
+              ? matchedFriendship.requesterUid === inv.recipientUid
+                ? matchedFriendship.requesterName
+                : matchedFriendship.recipientName
+              : 'Arkadaşın';
+
+            playTone('wrong');
+            setDeclinedInviteAlerts((prev) => [
+              { id: key, invite: inv, friendName },
+              ...prev.filter((a) => a.invite.id !== inv.id)
+            ]);
+            sendMobilePushNotification({
+              title: 'Oda Daveti Kabul Edilmedi',
+              body: `${friendName}, ${inv.roomCode} odası davetini kabul etmedi. Gerekirse tekrar davet edebilirsin.`,
+              tag: `invite_declined_${inv.id}`,
+              tab: 'friends'
+            });
+          }
+        }
+      });
     });
 
     return () => {
@@ -377,6 +447,7 @@ export default function App() {
       if (unsubNotifs) unsubNotifs();
       if (unsubFriends) unsubFriends();
       if (unsubInvites) unsubInvites();
+      if (unsubSentInvites) unsubSentInvites();
     };
   }, []);
 
@@ -457,10 +528,16 @@ export default function App() {
     return () => unsub();
   }, [isAdmin, authUser, userProfile?.username]);
 
-  // Active Multiplayer Room
+  // Active Multiplayer Room & Active Rejoinable Rooms
   const [room, setRoom] = useState<Room | null>(null);
+  const [activeRooms, setActiveRooms] = useState<Room[]>([]);
   const [currentRoundUserScore, setCurrentRoundUserScore] = useState<PlayerScore | null>(null);
   const sseUnsubRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    const unsub = RoomFirestore.subscribeToActiveRooms(currentUser.id, setActiveRooms);
+    return () => unsub();
+  }, [currentUser.id]);
 
   // Monitor live status of rooms referenced by pending invites
   useEffect(() => {
@@ -573,6 +650,7 @@ export default function App() {
     roundCount: number;
     difficulty: 'karisik' | Difficulty;
     category: PhonemeCategory;
+    progressionMode: RoomProgressionMode;
     creatorName: string;
     creatorAvatar: string;
   }) => {
@@ -594,7 +672,8 @@ export default function App() {
         avatar: settings.creatorAvatar,
         roundCount: settings.roundCount,
         difficulty: settings.difficulty,
-        category: settings.category
+        category: settings.category,
+        progressionMode: settings.progressionMode
       });
 
       setRoom(created);
@@ -677,7 +756,7 @@ export default function App() {
   const handleNextRound = async () => {
     if (!room) return;
     try {
-      await RoomFirestore.nextRound(room.code, currentUser.id, tekerlemeler);
+      await RoomFirestore.nextRound(room.code, currentUser.id, tekerlemeler, room.currentRound);
       setCurrentRoundUserScore(null);
     } catch (err) {
       console.error(err);
@@ -803,6 +882,9 @@ export default function App() {
       senderAvatar: currentUser.avatar,
       recipientUid: friendUid
     });
+    setDeclinedInviteAlerts((prev) =>
+      prev.filter((a) => !(a.invite.recipientUid === friendUid && a.invite.roomCode === room.code))
+    );
   };
 
   const handleCreateRoomAndInviteFriend = async (friendUid: string) => {
@@ -819,7 +901,8 @@ export default function App() {
         avatar: currentUser.avatar,
         roundCount: 3,
         difficulty: 'karisik',
-        category: 'tum'
+        category: 'tum',
+        progressionMode: 'host'
       });
       setRoom(created);
       setCurrentRoundUserScore(null);
@@ -832,11 +915,44 @@ export default function App() {
         senderAvatar: currentUser.avatar,
         recipientUid: friendUid
       });
+      setDeclinedInviteAlerts((prev) => prev.filter((a) => a.invite.recipientUid !== friendUid));
     } catch (err: unknown) {
       setRoomError(err instanceof Error ? err.message : 'Oda oluşturulurken bir hata oluştu.');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleReinviteFromAlert = async (alertItem: {
+    id: string;
+    invite: RoomInvite;
+    friendName: string;
+  }) => {
+    if (!authUser) return;
+    const { invite } = alertItem;
+    setDeclinedInviteAlerts((prev) => prev.filter((a) => a.id !== alertItem.id));
+
+    if (room && room.code === invite.roomCode && room.status === 'waiting') {
+      await handleInviteFriendToActiveRoom(invite.recipientUid);
+      return;
+    }
+
+    const matchingActive = activeRooms.find(
+      (r) => r.code === invite.roomCode && r.status === 'waiting'
+    );
+    if (matchingActive) {
+      await sendRoomInviteToFriend({
+        roomCode: matchingActive.code,
+        roomTitle: matchingActive.title,
+        senderUid: authUser.uid,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        recipientUid: invite.recipientUid
+      });
+      return;
+    }
+
+    await handleCreateRoomAndInviteFriend(invite.recipientUid);
   };
 
   const notifClickHandlerRef = useRef<(detail: { roomCode?: string; tab?: string }) => void>(() => undefined);
@@ -903,6 +1019,11 @@ export default function App() {
         };
       });
   }, [friendships, authUser]);
+
+  const rejoinableRooms = useMemo(
+    () => activeRooms.filter((r) => r.code !== room?.code),
+    [activeRooms, room?.code]
+  );
 
   const roundScoresForCurrentRound: PlayerScore[] =
     room?.roundScores?.[room.currentRound] ||
@@ -1011,6 +1132,53 @@ export default function App() {
         </div>
       )}
 
+      {/* Live Declined Room Invitation Alerts (with instant Tekrar Davet Et button) */}
+      {authUser && declinedInviteAlerts.length > 0 && (
+        <div className="relative z-30 max-w-4xl w-full mx-auto px-3 sm:px-4 pt-3 space-y-2">
+          {declinedInviteAlerts.slice(0, 2).map((alertItem) => (
+            <div
+              key={alertItem.id}
+              className="p-3 rounded-2xl border-2 border-[#FF006E]/55 bg-[#FF006E]/18 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 text-xs shadow-lg animate-screen-in"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Bell className="w-4 h-4 text-[#FF006E] shrink-0" />
+                <div className="min-w-0 text-rose-100">
+                  <strong className="text-white">{alertItem.friendName}</strong>,{' '}
+                  <span className="font-mono font-bold text-[#FFBE0B]">
+                    {alertItem.invite.roomCode}
+                  </span>{' '}
+                  odası davetini kabul etmedi.
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTone('tap');
+                    handleReinviteFromAlert(alertItem);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#FF006E] to-[#FFBE0B] text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Swords className="w-3.5 h-3.5" />
+                  <span>Tekrar Davet Et</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTone('tap');
+                    setDeclinedInviteAlerts((prev) => prev.filter((a) => a.id !== alertItem.id));
+                  }}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                  aria-label="Bildirimi kapat"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Live Unread User Notifications Strip (Approved / Deleted / Role Updated) */}
       {authUser && unreadNotifications.length > 0 && (
         <div className="relative z-30 max-w-4xl w-full mx-auto px-3 sm:px-4 pt-3 space-y-2">
@@ -1081,6 +1249,8 @@ export default function App() {
                   userProfile={userProfile}
                   friends={acceptedFriendsSummary}
                   incomingInvites={pendingRoomInvites}
+                  sentInvites={sentInvites}
+                  rejoinableRooms={rejoinableRooms}
                   invitedRoomsInfo={invitedRoomsInfo}
                   pendingFriendsCount={pendingFriendsBadgeCount}
                   onOpenAuth={() => setIsAuthModalOpen(true)}
@@ -1107,6 +1277,7 @@ export default function App() {
                   currentUser={currentUser}
                   isHost={room.hostId === currentUser.id}
                   onFinishRound={handleFinishRound}
+                  onLeaveRoom={handleLeaveRoom}
                 />
               )}
 
@@ -1138,8 +1309,14 @@ export default function App() {
                   totalPlayersCount={room.players.length}
                   isWaitingForOthers={room.status === 'in_round'}
                   isHost={room.hostId === currentUser.id}
-                  onForceFinishRound={() => RoomFirestore.finishRoundNow(room.code, currentUser.id)}
+                  progressionMode={room.settings.progressionMode || 'host'}
+                  hostLeftAutoMode={Boolean(room.hostLeftAutoMode)}
+                  timeLimitSeconds={room.settings.timeLimitSeconds}
+                  onForceFinishRound={() =>
+                    RoomFirestore.finishRoundNow(room.code, currentUser.id, room.currentRound)
+                  }
                   onNextRound={handleNextRound}
+                  onLeaveRoom={handleLeaveRoom}
                 />
               )}
 
@@ -1211,6 +1388,7 @@ export default function App() {
               userProfile={userProfile}
               friendships={friendships}
               incomingInvites={roomInvites}
+              sentInvites={sentInvites}
               invitedRoomsInfo={invitedRoomsInfo}
               activeRoom={room}
               onOpenAuth={() => setIsAuthModalOpen(true)}
