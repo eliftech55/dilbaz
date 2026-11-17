@@ -1,4 +1,5 @@
 import { Difficulty, UserProfile } from '../types/game';
+import { safeLocalGet, safeLocalSet } from './safeStorage';
 
 export type PhoenixDifficultyInput = 'karisik' | Difficulty;
 
@@ -28,6 +29,27 @@ export interface PhoenixRelicItem {
   badgeIcon: 'feather' | 'nazar' | 'flame' | 'crown' | 'bolt' | 'halo';
 }
 
+export interface PhoenixFeatherPalette {
+  id: string;
+  name: string;
+  primaryColor: string;
+  secondaryColor: string;
+  bodyBaseColor: string;
+  accentColor: string;
+  swirlColors: [string, string, string, string];
+  ringGradient: string;
+  requiredRelicIds?: string[];
+  unlockHint: string;
+}
+
+export interface PhoenixWingPattern {
+  id: 'ebru_wave' | 'peacock_eye' | 'flame_streak' | 'royal_filigree' | 'star_bolt';
+  name: string;
+  shortLabel: string;
+  requiredRelicIds?: string[];
+  unlockHint: string;
+}
+
 export interface LocalPhoenixProgress {
   soloXp: number;
   sparks: number;
@@ -38,6 +60,8 @@ export interface LocalPhoenixProgress {
   unlockedIds: string[];
   equipped: Record<RelicSlot, string>;
   itemRanks: Record<string, number>;
+  featherPaletteId: string;
+  wingPatternId: PhoenixWingPattern['id'];
 }
 
 export interface PhoenixComputedState {
@@ -60,9 +84,23 @@ export interface PhoenixComputedState {
       canAffordUpgrade: boolean;
     }
   >;
+  featherPalettes: Array<
+    PhoenixFeatherPalette & {
+      unlocked: boolean;
+      selected: boolean;
+    }
+  >;
+  wingPatterns: Array<
+    PhoenixWingPattern & {
+      unlocked: boolean;
+      selected: boolean;
+    }
+  >;
   activeAura: PhoenixRelicItem;
   activeTalisman: PhoenixRelicItem | null;
   activeCrest: PhoenixRelicItem | null;
+  activeFeatherPalette: PhoenixFeatherPalette;
+  activeWingPattern: PhoenixWingPattern;
   flapDurationSeconds: number;
   flapLabel: string;
 }
@@ -235,6 +273,129 @@ export const PHOENIX_RELICS: PhoenixRelicItem[] = [
   }
 ];
 
+export const PHOENIX_FEATHER_PALETTES: PhoenixFeatherPalette[] = [
+  {
+    id: 'ebru_classic',
+    name: 'Ebru Klasiği',
+    primaryColor: '#00F5D4',
+    secondaryColor: '#FF006E',
+    bodyBaseColor: '#1E3A8A',
+    accentColor: '#FFBE0B',
+    swirlColors: ['#00F5D4', '#FF006E', '#3A86FF', '#FFBE0B'],
+    ringGradient: 'from-[#00F5D4] via-[#3A86FF] to-[#FF006E]',
+    unlockHint: 'Başlangıç paleti'
+  },
+  {
+    id: 'nazar_sapphire',
+    name: 'Nazar Safiri',
+    primaryColor: '#38BDF8',
+    secondaryColor: '#1D4ED8',
+    bodyBaseColor: '#0F2A6B',
+    accentColor: '#00F5D4',
+    swirlColors: ['#38BDF8', '#1D4ED8', '#00F5D4', '#FFFBEB'],
+    ringGradient: 'from-[#38BDF8] via-[#1D4ED8] to-[#00F5D4]',
+    requiredRelicIds: ['talisman_nazar'],
+    unlockHint: 'Nazar Tılsımı ile açılır'
+  },
+  {
+    id: 'pomegranate_flame',
+    name: 'Nar Çiçeği Alevi',
+    primaryColor: '#FF006E',
+    secondaryColor: '#FF5400',
+    bodyBaseColor: '#4A0D2E',
+    accentColor: '#FFBE0B',
+    swirlColors: ['#FF006E', '#FF5400', '#FFBE0B', '#BE123C'],
+    ringGradient: 'from-[#FF006E] via-[#FF5400] to-[#FFBE0B]',
+    requiredRelicIds: ['aura_pomegranate_flame'],
+    unlockHint: 'Nar Çiçeği Alevi ile açılır'
+  },
+  {
+    id: 'imperial_gold',
+    name: 'Altın İbik',
+    primaryColor: '#FFBE0B',
+    secondaryColor: '#FB8500',
+    bodyBaseColor: '#3B2305',
+    accentColor: '#FFF3B0',
+    swirlColors: ['#FFBE0B', '#F59E0B', '#FFF3B0', '#FF5400'],
+    ringGradient: 'from-[#FFBE0B] via-[#FB8500] to-[#FFF3B0]',
+    requiredRelicIds: ['crest_golden_crown'],
+    unlockHint: 'Altın İbik Tacı ile açılır'
+  },
+  {
+    id: 'emerald_bolt',
+    name: 'Zümrüt Yıldızı',
+    primaryColor: '#06D6A0',
+    secondaryColor: '#00F5D4',
+    bodyBaseColor: '#064E3B',
+    accentColor: '#FFBE0B',
+    swirlColors: ['#06D6A0', '#00F5D4', '#FFBE0B', '#3A86FF'],
+    ringGradient: 'from-[#06D6A0] via-[#00F5D4] to-[#FFBE0B]',
+    requiredRelicIds: ['talisman_speed_bolt'],
+    unlockHint: 'Hız Yıldızı İzi ile açılır'
+  },
+  {
+    id: 'celestial_sovereign',
+    name: 'Gök Sultanı',
+    primaryColor: '#00F5D4',
+    secondaryColor: '#A855F7',
+    bodyBaseColor: '#1E1B4B',
+    accentColor: '#FFBE0B',
+    swirlColors: ['#FFBE0B', '#00F5D4', '#EC4899', '#8B5CF6'],
+    ringGradient: 'from-[#FFBE0B] via-[#00F5D4] to-[#A855F7]',
+    requiredRelicIds: ['crest_celestial_halo'],
+    unlockHint: 'Gök Sultanı Halesi ile açılır'
+  }
+];
+
+export const PHOENIX_WING_PATTERNS: PhoenixWingPattern[] = [
+  {
+    id: 'ebru_wave',
+    name: 'Ebru Dalgası',
+    shortLabel: 'Ebru',
+    unlockHint: 'Logo özgün deseni'
+  },
+  {
+    id: 'peacock_eye',
+    name: 'Tavus Gözü',
+    shortLabel: 'Tavus',
+    requiredRelicIds: ['talisman_nazar'],
+    unlockHint: 'Nazar Tılsımı ile açılır'
+  },
+  {
+    id: 'flame_streak',
+    name: 'Alev Şeridi',
+    shortLabel: 'Alev',
+    requiredRelicIds: ['aura_pomegranate_flame'],
+    unlockHint: 'Nar Çiçeği Alevi ile açılır'
+  },
+  {
+    id: 'royal_filigree',
+    name: 'Selçuklu Nakışı',
+    shortLabel: 'Nakış',
+    requiredRelicIds: ['crest_golden_crown'],
+    unlockHint: 'Altın İbik Tacı ile açılır'
+  },
+  {
+    id: 'star_bolt',
+    name: 'Yıldız Kıvılcımı',
+    shortLabel: 'Yıldız',
+    requiredRelicIds: ['talisman_speed_bolt', 'crest_celestial_halo'],
+    unlockHint: 'Hız Yıldızı veya Gök Halesi ile açılır'
+  }
+];
+
+export function getFeatherPalette(paletteId?: string | null): PhoenixFeatherPalette {
+  return (
+    PHOENIX_FEATHER_PALETTES.find((p) => p.id === paletteId) || PHOENIX_FEATHER_PALETTES[0]
+  );
+}
+
+export function getWingPattern(patternId?: string | null): PhoenixWingPattern {
+  return (
+    PHOENIX_WING_PATTERNS.find((p) => p.id === patternId) || PHOENIX_WING_PATTERNS[0]
+  );
+}
+
 const DEFAULT_PROGRESS: LocalPhoenixProgress = {
   soloXp: 0,
   sparks: 50,
@@ -250,19 +411,24 @@ const DEFAULT_PROGRESS: LocalPhoenixProgress = {
   },
   itemRanks: {
     aura_ebru_cyan: 1
-  }
+  },
+  featherPaletteId: 'ebru_classic',
+  wingPatternId: 'ebru_wave'
 };
 
 export function loadPhoenixProgress(): LocalPhoenixProgress {
   if (typeof window === 'undefined') return DEFAULT_PROGRESS;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = safeLocalGet(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_PROGRESS };
     const parsed = JSON.parse(raw) as Partial<LocalPhoenixProgress>;
     const unlockedSet = new Set<string>([
       'aura_ebru_cyan',
       ...(Array.isArray(parsed.unlockedIds) ? parsed.unlockedIds : [])
     ]);
+    const paletteValid = PHOENIX_FEATHER_PALETTES.some((p) => p.id === parsed.featherPaletteId);
+    const patternValid = PHOENIX_WING_PATTERNS.some((p) => p.id === parsed.wingPatternId);
+
     return {
       soloXp: typeof parsed.soloXp === 'number' ? Math.max(0, parsed.soloXp) : 0,
       sparks: typeof parsed.sparks === 'number' ? Math.max(0, parsed.sparks) : 50,
@@ -281,7 +447,11 @@ export function loadPhoenixProgress(): LocalPhoenixProgress {
       itemRanks: {
         aura_ebru_cyan: 1,
         ...(parsed.itemRanks || {})
-      }
+      },
+      featherPaletteId: paletteValid ? (parsed.featherPaletteId as string) : 'ebru_classic',
+      wingPatternId: patternValid
+        ? (parsed.wingPatternId as PhoenixWingPattern['id'])
+        : 'ebru_wave'
     };
   } catch {
     return { ...DEFAULT_PROGRESS };
@@ -290,11 +460,7 @@ export function loadPhoenixProgress(): LocalPhoenixProgress {
 
 export function savePhoenixProgress(next: LocalPhoenixProgress): LocalPhoenixProgress {
   if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // ignore storage quota errors
-    }
+    safeLocalSet(STORAGE_KEY, JSON.stringify(next));
   }
   return next;
 }
@@ -375,6 +541,43 @@ export function getPhoenixState(
     };
   });
 
+  const unlockedRelicIds = new Set(relics.filter((r) => r.unlocked).map((r) => r.id));
+
+  const featherPalettes = PHOENIX_FEATHER_PALETTES.map((pal) => {
+    const unlocked =
+      !pal.requiredRelicIds ||
+      pal.requiredRelicIds.some((reqId) => unlockedRelicIds.has(reqId));
+    return {
+      ...pal,
+      unlocked,
+      selected: false
+    };
+  });
+
+  const resolvedPalette =
+    featherPalettes.find((p) => p.id === progress.featherPaletteId && p.unlocked) ||
+    featherPalettes[0];
+  featherPalettes.forEach((p) => {
+    p.selected = p.id === resolvedPalette.id;
+  });
+
+  const wingPatterns = PHOENIX_WING_PATTERNS.map((pat) => {
+    const unlocked =
+      !pat.requiredRelicIds ||
+      pat.requiredRelicIds.some((reqId) => unlockedRelicIds.has(reqId));
+    return {
+      ...pat,
+      unlocked,
+      selected: false
+    };
+  });
+
+  const resolvedPattern =
+    wingPatterns.find((p) => p.id === progress.wingPatternId && p.unlocked) || wingPatterns[0];
+  wingPatterns.forEach((p) => {
+    p.selected = p.id === resolvedPattern.id;
+  });
+
   const activeAura =
     relics.find((r) => r.slot === 'aura' && r.equipped && r.unlocked) || relics[0];
   const activeTalisman =
@@ -394,12 +597,59 @@ export function getPhoenixState(
     nextStage,
     progress,
     relics,
+    featherPalettes,
+    wingPatterns,
     activeAura,
     activeTalisman,
     activeCrest,
+    activeFeatherPalette: resolvedPalette,
+    activeWingPattern: resolvedPattern,
     flapDurationSeconds: flapInfo.durationSeconds,
     flapLabel: flapInfo.tempoLabel
   };
+}
+
+export function updatePhoenixCustomization(
+  updates: {
+    featherPaletteId?: string;
+    wingPatternId?: PhoenixWingPattern['id'];
+  },
+  userProfile: UserProfile | null | undefined
+): { ok: boolean; reason?: string; nextProgress: LocalPhoenixProgress } {
+  const current = loadPhoenixProgress();
+  const computed = getPhoenixState(userProfile, current);
+
+  let nextPaletteId = current.featherPaletteId;
+  let nextPatternId = current.wingPatternId;
+
+  if (updates.featherPaletteId !== undefined) {
+    const target = computed.featherPalettes.find((p) => p.id === updates.featherPaletteId);
+    if (!target) {
+      return { ok: false, reason: 'Palet bulunamadı', nextProgress: current };
+    }
+    if (!target.unlocked) {
+      return { ok: false, reason: target.unlockHint, nextProgress: current };
+    }
+    nextPaletteId = target.id;
+  }
+
+  if (updates.wingPatternId !== undefined) {
+    const target = computed.wingPatterns.find((p) => p.id === updates.wingPatternId);
+    if (!target) {
+      return { ok: false, reason: 'Desen bulunamadı', nextProgress: current };
+    }
+    if (!target.unlocked) {
+      return { ok: false, reason: target.unlockHint, nextProgress: current };
+    }
+    nextPatternId = target.id;
+  }
+
+  const nextProgress = savePhoenixProgress({
+    ...current,
+    featherPaletteId: nextPaletteId,
+    wingPatternId: nextPatternId
+  });
+  return { ok: true, nextProgress };
 }
 
 export function recordPracticeOrRoundReward(params: {
@@ -486,12 +736,21 @@ export function unlockOrEquipRelic(
     };
   }
 
+  const autoPalette = PHOENIX_FEATHER_PALETTES.find((p) =>
+    p.requiredRelicIds?.includes(target.id)
+  );
+  const autoPattern = PHOENIX_WING_PATTERNS.find((p) =>
+    p.requiredRelicIds?.includes(target.id)
+  );
+
   const nextProgress = savePhoenixProgress({
     ...current,
     sparks: current.sparks - target.unlockCostSparks,
     unlockedIds: Array.from(new Set([...current.unlockedIds, target.id])),
     itemRanks: { ...current.itemRanks, [target.id]: 1 },
-    equipped: { ...current.equipped, [target.slot]: target.id }
+    equipped: { ...current.equipped, [target.slot]: target.id },
+    featherPaletteId: autoPalette ? autoPalette.id : current.featherPaletteId,
+    wingPatternId: autoPattern ? autoPattern.id : current.wingPatternId
   });
 
   return { ok: true, nextProgress };

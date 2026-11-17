@@ -23,7 +23,8 @@ import {
   deleteNotification,
   checkIsAdmin,
   ensureBootstrapAdminRecord,
-  consumeGoogleRedirectResult
+  consumeGoogleRedirectResult,
+  syncPhoenixAppearanceToProfile
 } from './firebase/authService';
 import {
   subscribeToApprovedTekerlemeler,
@@ -70,6 +71,12 @@ import { OfflineIndicator } from './components/PWAInstallButton';
 import { KILIM_MOTIFS, getKilimMotif } from './components/KilimAvatar';
 import { setSoundMuted, playTone } from './utils/soundEffects';
 import { getPhoenixFlapSpeed, getPhoenixState } from './utils/phoenixProgression';
+import {
+  safeSessionGet,
+  safeSessionSet,
+  safeLocalGet,
+  safeLocalSet
+} from './utils/safeStorage';
 import {
   registerServiceWorker,
   sendMobilePushNotification,
@@ -121,9 +128,13 @@ export default function App() {
   // Intro video splash state (skip automatically if joining directly via ?oda= link)
   const [showIntro, setShowIntro] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('oda') || params.get('room')) return false;
-    return !sessionStorage.getItem('dilbaz_intro_seen');
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('oda') || params.get('room')) return false;
+      return !safeSessionGet('dilbaz_intro_seen');
+    } catch {
+      return false;
+    }
   });
 
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -138,18 +149,14 @@ export default function App() {
   };
 
   const handleCompleteIntro = () => {
-    try {
-      sessionStorage.setItem('dilbaz_intro_seen', '1');
-    } catch {
-      // ignore
-    }
+    safeSessionSet('dilbaz_intro_seen', '1');
     setShowIntro(false);
   };
 
   // Built-in / local fallback tekerlemeler (v2 merges all 78 unique deduplicated entries)
   const [localTekerlemeler, setLocalTekerlemeler] = useState<Tekerleme[]>(() => {
     try {
-      const savedV2 = localStorage.getItem('dilbaz_tekerlemeler_v2');
+      const savedV2 = safeLocalGet('dilbaz_tekerlemeler_v2');
       if (savedV2) {
         const parsed = JSON.parse(savedV2);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -195,20 +202,16 @@ export default function App() {
     let avatar = defaultMotif.id;
 
     if (typeof window !== 'undefined') {
-      try {
-        id = sessionStorage.getItem('dilbaz_session_id') || '';
-        name = sessionStorage.getItem('dilbaz_session_name') || '';
-        const savedAvatar = sessionStorage.getItem('dilbaz_session_avatar') || '';
+      id = safeSessionGet('dilbaz_session_id') || '';
+      name = safeSessionGet('dilbaz_session_name') || '';
+      const savedAvatar = safeSessionGet('dilbaz_session_avatar') || '';
 
-        if (savedAvatar && getKilimMotif(savedAvatar)) {
-          avatar = savedAvatar;
-        }
-        if (!id) {
-          id = `usr_${Math.random().toString(36).substring(2, 9)}`;
-          sessionStorage.setItem('dilbaz_session_id', id);
-        }
-      } catch {
-        id = `usr_${Date.now()}`;
+      if (savedAvatar && getKilimMotif(savedAvatar)) {
+        avatar = savedAvatar;
+      }
+      if (!id) {
+        id = `usr_${Math.random().toString(36).substring(2, 9)}`;
+        safeSessionSet('dilbaz_session_id', id);
       }
     }
 
@@ -543,21 +546,12 @@ export default function App() {
 
     if (!seedSyncAttemptedRef.current) {
       seedSyncAttemptedRef.current = true;
-      let alreadySynced = false;
-      try {
-        alreadySynced = localStorage.getItem('dilbaz_seed_v2_done') === '1';
-      } catch {
-        alreadySynced = false;
-      }
+      const alreadySynced = safeLocalGet('dilbaz_seed_v2_done') === '1';
       if (!alreadySynced) {
         const adminName = userProfile?.username || authUser.email || 'Yönetici';
         syncUniqueSeedTekerlemeler(INITIAL_TEKERLEMELER, authUser.uid, adminName)
           .then(() => {
-            try {
-              localStorage.setItem('dilbaz_seed_v2_done', '1');
-            } catch {
-              // ignore
-            }
+            safeLocalSet('dilbaz_seed_v2_done', '1');
           })
           .catch((err) => {
             console.warn('Admin tekerleme seed sync warning:', err);
@@ -701,11 +695,7 @@ export default function App() {
   }, [room?.code]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('dilbaz_tekerlemeler_v2', JSON.stringify(localTekerlemeler));
-    } catch {
-      // ignore
-    }
+    safeLocalSet('dilbaz_tekerlemeler_v2', JSON.stringify(localTekerlemeler));
   }, [localTekerlemeler]);
 
   const handleCreateRoom = async (settings: {
@@ -725,8 +715,8 @@ export default function App() {
         avatar: settings.creatorAvatar
       }));
 
-      sessionStorage.setItem('dilbaz_session_name', settings.creatorName);
-      sessionStorage.setItem('dilbaz_session_avatar', settings.creatorAvatar);
+      safeSessionSet('dilbaz_session_name', settings.creatorName);
+      safeSessionSet('dilbaz_session_avatar', settings.creatorAvatar);
 
       const created = await RoomFirestore.createRoom({
         hostId: currentUser.id,
@@ -762,8 +752,8 @@ export default function App() {
         avatar
       }));
 
-      sessionStorage.setItem('dilbaz_session_name', playerName);
-      sessionStorage.setItem('dilbaz_session_avatar', avatar);
+      safeSessionSet('dilbaz_session_name', playerName);
+      safeSessionSet('dilbaz_session_avatar', avatar);
 
       const joinedRoom = await RoomFirestore.joinRoom(
         code,
@@ -925,11 +915,7 @@ export default function App() {
     if (!isAdmin || !authUser) return undefined;
     const adminName = userProfile?.username || authUser.email || 'Yönetici';
     const result = await syncUniqueSeedTekerlemeler(INITIAL_TEKERLEMELER, authUser.uid, adminName);
-    try {
-      localStorage.setItem('dilbaz_seed_v2_done', '1');
-    } catch {
-      // ignore
-    }
+    safeLocalSet('dilbaz_seed_v2_done', '1');
     return result;
   };
 
@@ -1239,6 +1225,48 @@ export default function App() {
       `${flap.durationSeconds}s`
     );
   }, [phoenixState.level, activePhoenixDifficulty]);
+
+  // Sync signed-in user's Zümrüdüanka appearance to Firestore publicProfiles so it renders on profiles
+  useEffect(() => {
+    if (!authUser || !userProfile) return;
+    const nextLevel = phoenixState.level;
+    const nextStageId = phoenixState.stage.id;
+    const nextAuraId = phoenixState.activeAura.id;
+    const nextTalismanId = phoenixState.activeTalisman?.id || '';
+    const nextCrestId = phoenixState.activeCrest?.id || '';
+    const nextPaletteId = phoenixState.activeFeatherPalette.id;
+    const nextPatternId = phoenixState.activeWingPattern.id;
+
+    const changed =
+      userProfile.phoenixLevel !== nextLevel ||
+      userProfile.phoenixStageId !== nextStageId ||
+      userProfile.phoenixAuraId !== nextAuraId ||
+      (userProfile.phoenixTalismanId || '') !== nextTalismanId ||
+      (userProfile.phoenixCrestId || '') !== nextCrestId ||
+      userProfile.phoenixPaletteId !== nextPaletteId ||
+      userProfile.phoenixPatternId !== nextPatternId;
+
+    if (!changed) return;
+    void syncPhoenixAppearanceToProfile(authUser.uid, {
+      phoenixLevel: nextLevel,
+      phoenixStageId: nextStageId,
+      phoenixAuraId: nextAuraId,
+      phoenixTalismanId: nextTalismanId,
+      phoenixCrestId: nextCrestId,
+      phoenixPaletteId: nextPaletteId,
+      phoenixPatternId: nextPatternId
+    });
+  }, [
+    authUser,
+    userProfile,
+    phoenixState.level,
+    phoenixState.stage.id,
+    phoenixState.activeAura.id,
+    phoenixState.activeTalisman?.id,
+    phoenixState.activeCrest?.id,
+    phoenixState.activeFeatherPalette.id,
+    phoenixState.activeWingPattern.id
+  ]);
 
   return (
     <div className="relative min-h-screen text-[#F8FAFC] flex flex-col">
@@ -1731,6 +1759,11 @@ export default function App() {
         authUser={authUser}
         userProfile={userProfile}
         isAdmin={isAdmin}
+        phoenixState={phoenixState}
+        onOpenSanctuary={() => {
+          setIsAuthModalOpen(false);
+          setIsSanctuaryOpen(true);
+        }}
         onClose={() => setIsAuthModalOpen(false)}
         onOpenAdminPanel={() => setActiveTab('admin')}
       />

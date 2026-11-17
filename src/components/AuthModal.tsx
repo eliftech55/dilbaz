@@ -12,6 +12,8 @@ import {
 } from '../firebase/authService';
 import { getFriendlyAuthError } from '../firebase/errorHandler';
 import { KILIM_MOTIFS, KilimAvatar, getKilimMotif } from './KilimAvatar';
+import { DilbazMascot } from './DilbazMascot';
+import { PhoenixComputedState, getPhoenixState } from '../utils/phoenixProgression';
 import { playTone } from '../utils/soundEffects';
 import {
   X,
@@ -23,7 +25,8 @@ import {
   CheckCircle2,
   AlertCircle,
   KeyRound,
-  ShieldCheck
+  ShieldCheck,
+  Palette
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -31,6 +34,8 @@ interface AuthModalProps {
   authUser: User | null;
   userProfile: UserProfile | null;
   isAdmin: boolean;
+  phoenixState?: PhoenixComputedState;
+  onOpenSanctuary?: () => void;
   onClose: () => void;
   onOpenAdminPanel?: () => void;
 }
@@ -40,6 +45,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   authUser,
   userProfile,
   isAdmin,
+  phoenixState,
+  onOpenSanctuary,
   onClose,
   onOpenAdminPanel
 }) => {
@@ -240,6 +247,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   const activeMotif = getKilimMotif(selectedAvatar) || KILIM_MOTIFS[0];
+  const resolvedPhoenix = phoenixState || getPhoenixState(userProfile);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-[#090e1a]/85 backdrop-blur-md overflow-y-auto">
@@ -458,6 +466,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     {userProfile?.points ?? 0} p
                   </div>
                 </div>
+              </div>
+
+              {/* Zümrüdüanka Character Profile Card */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-[#3A86FF]/16 via-[#0d1629]/95 to-[#FF006E]/14 border border-[#00F5D4]/35 flex items-center justify-between gap-3.5">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <DilbazMascot
+                    size={62}
+                    level={resolvedPhoenix.level}
+                    onClick={onOpenSanctuary}
+                    title="Zümrüdüanka Yuvasını Aç"
+                  />
+                  <div className="min-w-0 space-y-1">
+                    <div className="text-[10px] uppercase tracking-wider font-mono text-[#00F5D4]">
+                      Zümrüdüanka Karakterim
+                    </div>
+                    <div className="text-sm font-display font-bold text-white truncate">
+                      Sv.{resolvedPhoenix.level} · {resolvedPhoenix.stage.name}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-[#FFBE0B] font-semibold">
+                        {resolvedPhoenix.activeFeatherPalette.name}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-[#93C5FD] font-semibold">
+                        {resolvedPhoenix.activeWingPattern.name}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {onOpenSanctuary && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTone('tap');
+                      onOpenSanctuary();
+                    }}
+                    className="px-3 py-2 rounded-xl bg-[#FFBE0B]/20 hover:bg-[#FFBE0B]/30 border border-[#FFBE0B]/45 text-[#FFBE0B] text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  >
+                    <Palette className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Özelleştir</span>
+                  </button>
+                )}
               </div>
 
               {isAdmin && onOpenAdminPanel && (

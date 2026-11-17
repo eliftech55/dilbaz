@@ -20,9 +20,44 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <script>
+      (function () {
+        var reloadedKey = 'dilbaz_chunk_reloaded';
+        function tryRecoverChunk(reason) {
+          try {
+            if (window.sessionStorage && window.sessionStorage.getItem(reloadedKey)) return;
+            if (window.sessionStorage) window.sessionStorage.setItem(reloadedKey, '1');
+            if ('caches' in window) {
+              window.caches.keys().then(function (keys) {
+                return Promise.all(keys.map(function (k) { return window.caches.delete(k); }));
+              }).finally(function () { window.location.reload(); });
+            } else {
+              window.location.reload();
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+        window.addEventListener('vite:preloadError', function (event) {
+          if (event && typeof event.preventDefault === 'function') event.preventDefault();
+          tryRecoverChunk('vite:preloadError');
+        });
+        window.addEventListener('error', function (e) {
+          var target = e && e.target;
+          if (target && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
+            tryRecoverChunk('asset-error');
+          }
+        }, true);
+      })();
+    </script>
   </head>
-  <body class="bg-[#0d1629] text-[#F8FAFC] antialiased selection:bg-[#FFBE0B] selection:text-[#14213D]">
-    <div id="root"></div>
+  <body class="min-h-[100dvh] bg-[#0d1629] text-[#F8FAFC] antialiased selection:bg-[#FFBE0B] selection:text-[#14213D]">
+    <div id="root" class="min-h-[100dvh] bg-[#0d1629]"></div>
+    <noscript>
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0d1629;color:#F8FAFC;font-family:sans-serif;padding:24px;text-align:center;">
+        Dilbaz uygulamasını çalıştırmak için lütfen tarayıcınızda JavaScript'i etkinleştirin.
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

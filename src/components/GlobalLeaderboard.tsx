@@ -9,6 +9,9 @@ import {
   POINTS_PER_PLAYER_MULTIPLAYER_WIN
 } from '../firebase/authService';
 import { KilimAvatar } from './KilimAvatar';
+import { DilbazMascot } from './DilbazMascot';
+import { resolveVisualsFromPublicProfile } from './PhoenixEquippedVisuals';
+import { PHOENIX_STAGES, getFeatherPalette } from '../utils/phoenixProgression';
 import { RumiCorners } from './EbruBackground';
 import { playTone } from '../utils/soundEffects';
 import {
@@ -189,7 +192,16 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
             <span className="px-2.5 py-1 rounded-xl bg-[#FFBE0B] text-[#14213D] font-display font-bold text-xs shrink-0">
               {myIndex >= 0 ? `#${myIndex + 1}` : 'İlk 10 Dışı'}
             </span>
-            <KilimAvatar avatar={myProfile.avatar} size={40} />
+            <div className="flex items-center gap-1.5 shrink-0">
+              <KilimAvatar avatar={myProfile.avatar} size={36} />
+              <DilbazMascot
+                size={40}
+                showWings={false}
+                level={myProfile.phoenixLevel || 1}
+                visualsOverride={resolveVisualsFromPublicProfile(myProfile)}
+                title={`${myProfile.username} Zümrüdüankası`}
+              />
+            </div>
             <div className="min-w-0">
               <div className="text-sm font-bold text-white truncate flex items-center gap-1.5">
                 <span className="truncate">{myProfile.username} (Sen)</span>
@@ -198,7 +210,7 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
                 </span>
               </div>
               <div className="text-[11px] text-[#CBD5E1]">
-                {myProfile.approvedTekerlemeCount} onaylı tekerleme · {myProfile.multiplayerWins} oda birinciliği
+                Sv.{myProfile.phoenixLevel || 1} · {myProfile.approvedTekerlemeCount} tekerleme · {myProfile.multiplayerWins} 1.lik
               </div>
             </div>
           </div>
@@ -225,6 +237,11 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
               '🥈 2. Telaffuz Ustası',
               '🥉 3. Telaffuz Ustası'
             ];
+            const phoenixLevel = user.phoenixLevel || 1;
+            const stageName =
+              PHOENIX_STAGES.find((s) => s.id === user.phoenixStageId)?.name ||
+              PHOENIX_STAGES[0].name;
+            const paletteName = getFeatherPalette(user.phoenixPaletteId).name;
 
             return (
               <div
@@ -234,9 +251,21 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
                 <RumiCorners />
                 <div className="relative z-10 flex flex-col items-center space-y-1.5">
                   <span className="text-[11px] font-bold text-[#FFBE0B] font-display">{badges[idx]}</span>
-                  <KilimAvatar avatar={user.avatar} size={52} />
+                  <div className="flex items-center justify-center gap-2 py-1">
+                    <DilbazMascot
+                      size={54}
+                      showWings
+                      level={phoenixLevel}
+                      visualsOverride={resolveVisualsFromPublicProfile(user)}
+                      title={`${user.username} · Sv.${phoenixLevel} ${stageName}`}
+                    />
+                    <KilimAvatar avatar={user.avatar} size={34} />
+                  </div>
                   <div className="text-sm font-bold text-white truncate max-w-full px-2">
                     {user.username}
+                  </div>
+                  <div className="text-[10px] px-2.5 py-0.5 rounded-full bg-white/10 border border-white/12 text-[#00F5D4] font-semibold">
+                    Sv.{phoenixLevel} {stageName} · {paletteName}
                   </div>
                   <div className="text-2xl font-bold font-display text-[#FFBE0B] tabular-nums">
                     {user.points} <span className="text-xs font-normal text-[#CBD5E1]">puan</span>
@@ -306,11 +335,23 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
                     >
                       #{idx + 1}
                     </div>
-                    <KilimAvatar avatar={profile.avatar} size={38} />
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <DilbazMascot
+                        size={36}
+                        showWings={false}
+                        level={profile.phoenixLevel || 1}
+                        visualsOverride={resolveVisualsFromPublicProfile(profile)}
+                        title={`${profile.username} Zümrüdüankası`}
+                      />
+                      <KilimAvatar avatar={profile.avatar} size={30} />
+                    </div>
                     <div className="min-w-0">
                       <div className="text-sm font-bold text-white truncate flex items-center gap-1.5">
                         <span className="truncate">{profile.username}</span>
                         {isMe && <span className="text-[10px] font-mono text-[#FFBE0B]">(Sen)</span>}
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#00F5D4]/15 text-[#00F5D4] font-bold shrink-0">
+                          Sv.{profile.phoenixLevel || 1}
+                        </span>
                         {profile.role === 'yonetici' && (
                           <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#FFBE0B]/20 text-[#FFBE0B] border border-[#FFBE0B]/40 font-bold">
                             Yönetici
@@ -388,14 +429,20 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
                     <tr key={member.uid} className="hover:bg-white/5 transition-colors">
                       <td className="py-3 px-2">
                         <div className="flex items-center gap-2.5">
-                          <KilimAvatar avatar={member.avatar} size={30} />
+                          <DilbazMascot
+                            size={30}
+                            showWings={false}
+                            level={member.phoenixLevel || 1}
+                            visualsOverride={resolveVisualsFromPublicProfile(member)}
+                          />
+                          <KilimAvatar avatar={member.avatar} size={26} />
                           <div>
                             <div className="font-bold text-white flex items-center gap-1">
                               <span>{member.username}</span>
                               {isSelf && <span className="text-[10px] text-[#FFBE0B]">(Sen)</span>}
                             </div>
                             <div className="text-[10px] text-[#94A3B8]">
-                              {member.approvedTekerlemeCount} tekerleme · {member.multiplayerWins} galibiyet
+                              Sv.{member.phoenixLevel || 1} · {member.approvedTekerlemeCount} tekerleme · {member.multiplayerWins} galibiyet
                             </div>
                           </div>
                         </div>

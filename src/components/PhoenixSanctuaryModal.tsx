@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { UserProfile } from '../types/game';
 import {
   PhoenixComputedState,
+  PhoenixWingPattern,
   RelicSlot,
   unlockOrEquipRelic,
+  updatePhoenixCustomization,
   upgradeRelicRank
 } from '../utils/phoenixProgression';
 import { resolveEquippedVisuals } from './PhoenixEquippedVisuals';
@@ -20,7 +22,9 @@ import {
   Lock,
   ArrowUpCircle,
   Star,
-  Eye
+  Eye,
+  Palette,
+  Feather
 } from 'lucide-react';
 import zumruduankaRelicImg from '../assets/images/zumruduanka_relics_1794737130585.jpg';
 
@@ -41,6 +45,8 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
 }) => {
   const [selectedSlot, setSelectedSlot] = useState<'all' | RelicSlot>('all');
   const [previewRelicId, setPreviewRelicId] = useState<string | null>(null);
+  const [previewPaletteId, setPreviewPaletteId] = useState<string | null>(null);
+  const [previewPatternId, setPreviewPatternId] = useState<PhoenixWingPattern['id'] | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -48,6 +54,12 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
   const baseVisuals = resolveEquippedVisuals(phoenix);
   const previewRelic = previewRelicId
     ? phoenix.relics.find((r) => r.id === previewRelicId) || null
+    : null;
+  const previewPalette = previewPaletteId
+    ? phoenix.featherPalettes.find((p) => p.id === previewPaletteId) || null
+    : null;
+  const previewPattern = previewPatternId
+    ? phoenix.wingPatterns.find((p) => p.id === previewPatternId) || null
     : null;
 
   const effective3D = {
@@ -67,12 +79,23 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
       previewRelic?.slot === 'crest'
         ? Math.max(1, previewRelic.rank)
         : baseVisuals.crestRank,
+    featherPaletteId: previewPaletteId || baseVisuals.featherPaletteId,
+    wingPatternId: previewPatternId || baseVisuals.wingPatternId,
     ringGradient:
-      (previewRelic?.slot === 'aura' && previewRelic.id === 'aura_pomegranate_flame') ||
-      (previewRelic?.slot !== 'aura' && baseVisuals.auraId === 'aura_pomegranate_flame')
+      previewPalette
+        ? previewPalette.ringGradient
+        : (previewRelic?.slot === 'aura' && previewRelic.id === 'aura_pomegranate_flame') ||
+          (previewRelic?.slot !== 'aura' && baseVisuals.auraId === 'aura_pomegranate_flame')
         ? 'from-[#FF006E] via-[#FF5400] to-[#FFBE0B]'
         : baseVisuals.ringGradient
   };
+
+  const isPreviewingAny = Boolean(previewRelic || previewPalette || previewPattern);
+  const previewTitleParts = [
+    previewRelic?.name,
+    previewPalette?.name,
+    previewPattern?.name
+  ].filter(Boolean);
 
   const ownedRelics = phoenix.relics.filter((r) => r.unlocked);
   const filteredRelics =
@@ -122,6 +145,53 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
     } else {
       playTone('wrong');
       setFeedback(res.reason || 'Yükseltilemedi');
+    }
+    setTimeout(() => setFeedback(null), 2200);
+  };
+
+  const handleSelectPalette = (paletteId: string, unlocked: boolean, hint: string, name: string) => {
+    if (!unlocked) {
+      playTone('tap');
+      setPreviewPaletteId((prev) => (prev === paletteId ? null : paletteId));
+      setFeedback(`Önizleme: ${name} (${hint})`);
+      setTimeout(() => setFeedback(null), 2600);
+      return;
+    }
+    setPreviewPaletteId(null);
+    const res = updatePhoenixCustomization({ featherPaletteId: paletteId }, userProfile);
+    if (res.ok) {
+      playTone('correct');
+      setFeedback(`Tüy paleti "${name}" uygulandı!`);
+      onProgressUpdated();
+    } else {
+      playTone('wrong');
+      setFeedback(res.reason || 'Uygulanamadı');
+    }
+    setTimeout(() => setFeedback(null), 2200);
+  };
+
+  const handleSelectPattern = (
+    patternId: PhoenixWingPattern['id'],
+    unlocked: boolean,
+    hint: string,
+    name: string
+  ) => {
+    if (!unlocked) {
+      playTone('tap');
+      setPreviewPatternId((prev) => (prev === patternId ? null : patternId));
+      setFeedback(`Önizleme: ${name} (${hint})`);
+      setTimeout(() => setFeedback(null), 2600);
+      return;
+    }
+    setPreviewPatternId(null);
+    const res = updatePhoenixCustomization({ wingPatternId: patternId }, userProfile);
+    if (res.ok) {
+      playTone('correct');
+      setFeedback(`Kanat deseni "${name}" uygulandı!`);
+      onProgressUpdated();
+    } else {
+      playTone('wrong');
+      setFeedback(res.reason || 'Uygulanamadı');
     }
     setTimeout(() => setFeedback(null), 2200);
   };
@@ -184,25 +254,134 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
             talismanRank={effective3D.talismanRank}
             crestId={effective3D.crestId}
             crestRank={effective3D.crestRank}
-            isPreviewing={Boolean(previewRelic)}
-            previewItemName={previewRelic?.name || null}
+            featherPaletteId={effective3D.featherPaletteId}
+            wingPatternId={effective3D.wingPatternId}
+            isPreviewing={isPreviewingAny}
+            previewItemName={previewTitleParts.join(' · ') || null}
             onResetPreview={() => {
               playTone('tap');
               setPreviewRelicId(null);
+              setPreviewPaletteId(null);
+              setPreviewPatternId(null);
             }}
           />
+
+          {/* Dynamic Feather Palette & Wing Pattern Customizer */}
+          <div className="p-3 rounded-2xl bg-[#0d1629]/85 border border-white/12 space-y-3">
+            {/* Feather Color Palette Selector */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] px-0.5">
+                <span className="font-bold text-white flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-[#FFBE0B]" />
+                  <span>Tüy Rengi Paleti</span>
+                </span>
+                <span className="text-[#93C5FD] text-[10px]">
+                  {phoenix.featherPalettes.find((p) => p.id === effective3D.featherPaletteId)?.name}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                {phoenix.featherPalettes.map((pal) => {
+                  const isActive = effective3D.featherPaletteId === pal.id;
+                  return (
+                    <button
+                      key={pal.id}
+                      type="button"
+                      onClick={() =>
+                        handleSelectPalette(pal.id, pal.unlocked, pal.unlockHint, pal.name)
+                      }
+                      title={pal.unlocked ? pal.name : `${pal.name} (${pal.unlockHint})`}
+                      className={`relative p-2 rounded-xl border flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-white/12 border-[#FFBE0B] shadow-md'
+                          : pal.unlocked
+                          ? 'bg-white/5 border-white/10 hover:border-white/30'
+                          : 'bg-white/[0.03] border-white/8 opacity-75 hover:opacity-100'
+                      }`}
+                    >
+                      <div className="flex items-center -space-x-1">
+                        <span
+                          className="w-3.5 h-3.5 rounded-full border border-white/40"
+                          style={{ backgroundColor: pal.primaryColor }}
+                        />
+                        <span
+                          className="w-3.5 h-3.5 rounded-full border border-white/40"
+                          style={{ backgroundColor: pal.secondaryColor }}
+                        />
+                        <span
+                          className="w-3.5 h-3.5 rounded-full border border-white/40"
+                          style={{ backgroundColor: pal.accentColor }}
+                        />
+                      </div>
+                      <span className="text-[9.5px] font-bold text-white truncate w-full text-center">
+                        {pal.name.split(' ')[0]}
+                      </span>
+                      {!pal.unlocked && (
+                        <Lock className="w-2.5 h-2.5 text-[#FFBE0B] absolute top-1 right-1" />
+                      )}
+                      {pal.selected && pal.unlocked && !previewPaletteId && (
+                        <Check className="w-2.5 h-2.5 text-[#06D6A0] absolute top-1 right-1" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Wing Pattern Selector */}
+            <div className="space-y-1.5 pt-1 border-t border-white/10">
+              <div className="flex items-center justify-between text-[11px] px-0.5">
+                <span className="font-bold text-white flex items-center gap-1.5">
+                  <Feather className="w-3.5 h-3.5 text-[#00F5D4]" />
+                  <span>Kanat Deseni</span>
+                </span>
+                <span className="text-[#93C5FD] text-[10px]">
+                  {phoenix.wingPatterns.find((p) => p.id === effective3D.wingPatternId)?.name}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {phoenix.wingPatterns.map((pat) => {
+                  const isActive = effective3D.wingPatternId === pat.id;
+                  return (
+                    <button
+                      key={pat.id}
+                      type="button"
+                      onClick={() =>
+                        handleSelectPattern(pat.id, pat.unlocked, pat.unlockHint, pat.name)
+                      }
+                      title={pat.unlocked ? pat.name : `${pat.name} (${pat.unlockHint})`}
+                      className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-[#00F5D4]/20 border-[#00F5D4] text-[#00F5D4]'
+                          : pat.unlocked
+                          ? 'bg-white/5 border-white/12 text-[#CBD5E1] hover:text-white'
+                          : 'bg-white/[0.03] border-white/8 text-[#94A3B8] hover:text-white'
+                      }`}
+                    >
+                      {!pat.unlocked && <Lock className="w-3 h-3 text-[#FFBE0B]" />}
+                      <span>{pat.name}</span>
+                      {pat.selected && pat.unlocked && !previewPatternId && (
+                        <Check className="w-3 h-3 text-[#06D6A0]" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
 
           {/* Quick Preview Strip for Owned Rare Items */}
           {ownedRelics.length > 0 && (
             <div className="p-2.5 rounded-2xl bg-[#0d1629]/85 border border-white/10 space-y-1.5">
               <div className="flex items-center justify-between text-[10.5px] text-[#93C5FD] px-0.5">
                 <span className="font-bold">Sahip Olduğun Ögeleri 3D Önizle</span>
-                {previewRelic && (
+                {isPreviewingAny && (
                   <button
                     type="button"
                     onClick={() => {
                       playTone('tap');
                       setPreviewRelicId(null);
+                      setPreviewPaletteId(null);
+                      setPreviewPatternId(null);
                     }}
                     className="text-[#FFBE0B] hover:underline font-semibold cursor-pointer"
                   >

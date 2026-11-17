@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Smartphone, Cpu, Network, Database, Award, Milestone, Copy, Check } from 'lucide-react';
 import { PhoenixWingPair } from './DilbazMascot';
+import { safeCopyText } from '../utils/safeStorage';
 
 interface GuideModalProps {
   isOpen: boolean;
@@ -14,7 +15,7 @@ export const GuideModal: React.FC<GuideModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   const handleCopy = (code: string, id: string) => {
-    navigator.clipboard.writeText(code);
+    void safeCopyText(code);
     setCopiedCode(id);
     setTimeout(() => setCopiedCode(null), 2000);
   };

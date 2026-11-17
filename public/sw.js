@@ -1,7 +1,6 @@
 // Dilbaz Service Worker — Offline shell, Web Push (when app/APK is closed), monochrome badge & sound
-const CACHE_NAME = 'dilbaz-shell-v3';
+const CACHE_NAME = 'dilbaz-shell-v4';
 const PRECACHE_ASSETS = [
-  './',
   './pwa-192x192.png',
   './pwa-badge-96x96.png',
   './sounds/dilbaz-bildirim.wav'
@@ -43,8 +42,11 @@ self.addEventListener('fetch', (event) => {
       fetch(req)
         .then((res) => {
           if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => undefined);
+            const ct = res.headers.get('content-type') || '';
+            if (ct.includes('text/html')) {
+              const copy = res.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => undefined);
+            }
           }
           return res;
         })

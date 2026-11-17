@@ -60,38 +60,53 @@ export const WordComparison: React.FC<WordComparisonProps> = ({
                 %{liveAccuracy} Doğruluk
               </span>
             )}
-            <span className="text-[#475569] font-semibold">
+            <span className="text-[#475569] font-semibold tabular-nums">
               {correctCount} / {originalWords.length} kelime
             </span>
           </div>
         </div>
 
-        {/* Interactive Word Grid with High-Contrast Green/Amber/Red Tracking */}
-        <div className="relative z-10 flex flex-wrap gap-2 text-lg sm:text-2xl font-display font-bold leading-relaxed">
+        {/* Fixed-Geometry Word Grid: uniform border-2 + out-of-flow status corner badge so words NEVER shift lines while reading */}
+        <div className="relative z-10 flex flex-wrap gap-x-2 gap-y-2.5 text-lg sm:text-2xl font-display font-bold leading-relaxed">
           {originalWords.map((item, idx) => {
             const isJustMatched = justMatchedIndices.includes(idx);
             let style =
-              'bg-white/85 text-[#14213D] border border-[#3A86FF]/20 shadow-xs';
-            let icon = null;
+              'bg-white/85 text-[#14213D] border-2 border-[#3A86FF]/20 shadow-xs';
+            let statusBadge: React.ReactNode = null;
 
             if (item.status === 'correct') {
               style = isJustMatched
                 ? 'bg-[#06D6A0]/35 text-[#065F46] border-2 border-[#06D6A0] ring-2 ring-[#FFBE0B]/70 shadow-md shadow-[#06D6A0]/35 animate-word-pop'
                 : 'bg-[#06D6A0]/25 text-[#065F46] border-2 border-[#06D6A0] shadow-sm shadow-[#06D6A0]/25 animate-word-pop';
-              icon = (
-                <CheckCircle2 className="w-4 h-4 text-[#059669] inline ml-1.5 shrink-0" />
+              statusBadge = (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-white shadow-xs flex items-center justify-center"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#059669]" />
+                </span>
               );
             } else if (item.status === 'imperfect') {
               style =
                 'bg-[#FFBE0B]/30 text-[#92400E] border-2 border-[#F59E0B] shadow-sm';
-              icon = (
-                <AlertCircle className="w-4 h-4 text-[#D97706] inline ml-1.5 shrink-0" />
+              statusBadge = (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-white shadow-xs flex items-center justify-center"
+                >
+                  <AlertCircle className="w-3.5 h-3.5 text-[#D97706]" />
+                </span>
               );
             } else if (item.status === 'missed') {
               style =
                 'bg-[#FF006E]/18 text-[#9F1239] border-2 border-[#FF006E]/70 shadow-sm';
-              icon = (
-                <XCircle className="w-4 h-4 text-[#E11D48] inline ml-1.5 shrink-0" />
+              statusBadge = (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-white shadow-xs flex items-center justify-center"
+                >
+                  <XCircle className="w-3.5 h-3.5 text-[#E11D48]" />
+                </span>
               );
             } else if (item.status === 'current' && isListening) {
               style =
@@ -102,11 +117,11 @@ export const WordComparison: React.FC<WordComparisonProps> = ({
               <span
                 key={idx}
                 data-word-index={idx}
-                className={`px-3 py-1 rounded-xl transition-all duration-200 inline-flex items-center ${style}`}
+                className={`relative px-3 py-1 rounded-xl transition-colors duration-200 inline-flex items-center ${style}`}
                 title={item.recognizedAs ? `Algılanan: "${item.recognizedAs}"` : undefined}
               >
-                {item.word}
-                {icon}
+                <span>{item.word}</span>
+                {statusBadge}
               </span>
             );
           })}

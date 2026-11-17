@@ -43,6 +43,13 @@ export interface UserProfile {
   approvedTekerlemeCount: number;
   multiplayerWins: number;
   lastClaimId?: string;
+  phoenixLevel?: number;
+  phoenixStageId?: string;
+  phoenixAuraId?: string;
+  phoenixTalismanId?: string;
+  phoenixCrestId?: string;
+  phoenixPaletteId?: string;
+  phoenixPatternId?: string;
   createdAt: number;
   updatedAt: number;
 }

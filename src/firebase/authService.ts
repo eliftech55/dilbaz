@@ -299,6 +299,17 @@ export async function saveUserProfile(params: {
     approvedTekerlemeCount: existingProfile ? existingProfile.approvedTekerlemeCount : 0,
     multiplayerWins: existingProfile ? existingProfile.multiplayerWins : 0,
     ...(existingProfile?.lastClaimId ? { lastClaimId: existingProfile.lastClaimId } : {}),
+    ...(existingProfile?.phoenixLevel ? { phoenixLevel: existingProfile.phoenixLevel } : {}),
+    ...(existingProfile?.phoenixStageId ? { phoenixStageId: existingProfile.phoenixStageId } : {}),
+    ...(existingProfile?.phoenixAuraId ? { phoenixAuraId: existingProfile.phoenixAuraId } : {}),
+    ...(existingProfile?.phoenixTalismanId !== undefined
+      ? { phoenixTalismanId: existingProfile.phoenixTalismanId }
+      : {}),
+    ...(existingProfile?.phoenixCrestId !== undefined
+      ? { phoenixCrestId: existingProfile.phoenixCrestId }
+      : {}),
+    ...(existingProfile?.phoenixPaletteId ? { phoenixPaletteId: existingProfile.phoenixPaletteId } : {}),
+    ...(existingProfile?.phoenixPatternId ? { phoenixPatternId: existingProfile.phoenixPatternId } : {}),
     createdAt: existingProfile ? existingProfile.createdAt : now,
     updatedAt: now
   };
@@ -551,4 +562,54 @@ export async function deleteNotification(notificationId: string): Promise<void> 
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `notifications/${notificationId}`);
   }
+}
+
+export async function syncPhoenixAppearanceToProfile(
+  uid: string,
+  appearance: {
+    phoenixLevel: number;
+    phoenixStageId: string;
+    phoenixAuraId: string;
+    phoenixTalismanId: string;
+    phoenixCrestId: string;
+    phoenixPaletteId: string;
+    phoenixPatternId: string;
+  }
+): Promise<void> {
+  try {
+    const clampStr = (val: string) => String(val || '').slice(0, 40);
+    await updateDoc(doc(db, 'publicProfiles', uid), {
+      phoenixLevel: Math.max(1, Math.min(100, Math.round(appearance.phoenixLevel || 1))),
+      phoenixStageId: clampStr(appearance.phoenixStageId || 'spark'),
+      phoenixAuraId: clampStr(appearance.phoenixAuraId || 'aura_ebru_cyan'),
+      phoenixTalismanId: clampStr(appearance.phoenixTalismanId || ''),
+      phoenixCrestId: clampStr(appearance.phoenixCrestId || ''),
+      phoenixPaletteId: clampStr(appearance.phoenixPaletteId || 'ebru_classic'),
+      phoenixPatternId: clampStr(appearance.phoenixPatternId || 'ebru_wave'),
+      updatedAt: Date.now()
+    });
+  } catch (err) {
+    console.warn('Phoenix appearance sync warning:', err);
+  }
+}
+
+export async function fetchPublicProfilesMap(
+  uids: string[]
+): Promise<Record<string, UserProfile>> {
+  const unique = Array.from(new Set(uids.filter(Boolean))).slice(0, 40);
+  if (unique.length === 0) return {};
+  const result: Record<string, UserProfile> = {};
+  await Promise.all(
+    unique.map(async (uid) => {
+      try {
+        const snap = await getDoc(doc(db, 'publicProfiles', uid));
+        if (snap.exists()) {
+          result[uid] = snap.data() as UserProfile;
+        }
+      } catch {
+        // ignore missing or transient read failures
+      }
+    })
+  );
+  return result;
 }

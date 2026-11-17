@@ -89,6 +89,13 @@
         "approvedTekerlemeCount": { "type": "number" },
         "multiplayerWins": { "type": "number" },
         "lastClaimId": { "type": "string", "maxLength": 160 },
+        "phoenixLevel": { "type": "number" },
+        "phoenixStageId": { "type": "string", "maxLength": 40 },
+        "phoenixAuraId": { "type": "string", "maxLength": 40 },
+        "phoenixTalismanId": { "type": "string", "maxLength": 40 },
+        "phoenixCrestId": { "type": "string", "maxLength": 40 },
+        "phoenixPaletteId": { "type": "string", "maxLength": 40 },
+        "phoenixPatternId": { "type": "string", "maxLength": 40 },
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" }
       },

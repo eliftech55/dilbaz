@@ -2,12 +2,15 @@ import React, { useId, useState } from 'react';
 import { playTone } from '../utils/soundEffects';
 import {
   PhoenixDifficultyInput,
+  PhoenixWingPattern,
   computeLevelFromXp,
+  getFeatherPalette,
   getPhoenixFlapSpeed,
   loadPhoenixProgress
 } from '../utils/phoenixProgression';
 import {
   PhoenixCharacterRelicOverlay,
+  ResolvedPhoenixVisuals,
   resolveEquippedVisuals
 } from './PhoenixEquippedVisuals';
 import zumruduankaHeroImg from '../assets/images/zumruduanka_hero_1794737139184.jpg';
@@ -20,13 +23,17 @@ interface PhoenixWingPairProps {
   auraId?: string;
   auraRank?: number;
   talismanId?: string;
+  featherPaletteId?: string;
+  wingPatternId?: PhoenixWingPattern['id'];
 }
 
 export const PhoenixWingPair: React.FC<PhoenixWingPairProps> = ({
   compact = false,
   auraId,
   auraRank,
-  talismanId
+  talismanId,
+  featherPaletteId,
+  wingPatternId
 }) => {
   const uid = useId().replace(/:/g, '');
   const leftGradId = `phoenixWingL_${uid}`;
@@ -36,19 +43,101 @@ export const PhoenixWingPair: React.FC<PhoenixWingPairProps> = ({
   const activeAuraId = auraId ?? resolved.auraId;
   const activeAuraRank = auraRank ?? resolved.auraRank;
   const activeTalismanId = talismanId ?? resolved.talismanId;
+  const activePaletteId = featherPaletteId ?? resolved.featherPaletteId;
+  const activePatternId = wingPatternId ?? resolved.wingPatternId;
 
   const isFlame = activeAuraId === 'aura_pomegranate_flame';
   const hasSpeedTrail = activeTalismanId === 'talisman_speed_bolt';
+  const palette = getFeatherPalette(activePaletteId);
 
   const sideOffset = compact ? '-left-[30%]' : '-left-[42%]';
   const rightOffset = compact ? '-right-[30%]' : '-right-[42%]';
   const wingWidthClass = compact ? 'w-[62%] h-[78%]' : 'w-[70%] h-[86%]';
 
-  const stop0 = isFlame ? '#FF006E' : '#00F5D4';
-  const stop1 = isFlame ? '#FF5400' : '#3A86FF';
-  const stop2 = isFlame ? '#FFBE0B' : '#06D6A0';
-  const covertFill = isFlame ? '#FFBE0B' : '#3A86FF';
-  const ribStroke = isFlame ? '#FFF3B0' : '#FFFBEB';
+  const stop0 =
+    activePaletteId !== 'ebru_classic'
+      ? palette.primaryColor
+      : isFlame
+      ? '#FF006E'
+      : '#00F5D4';
+  const stop1 =
+    activePaletteId !== 'ebru_classic'
+      ? palette.secondaryColor
+      : isFlame
+      ? '#FF5400'
+      : '#3A86FF';
+  const stop2 =
+    activePaletteId !== 'ebru_classic'
+      ? palette.accentColor
+      : isFlame
+      ? '#FFBE0B'
+      : '#06D6A0';
+  const covertFill =
+    activePaletteId !== 'ebru_classic'
+      ? palette.secondaryColor
+      : isFlame
+      ? '#FFBE0B'
+      : '#3A86FF';
+  const ribStroke = palette.accentColor || '#FFFBEB';
+
+  const renderPatternAccents = (side: 'left' | 'right') => {
+    const isLeft = side === 'left';
+    if (activePatternId === 'peacock_eye') {
+      return (
+        <>
+          <circle cx={isLeft ? 16 : 48} cy="16" r="3.4" fill={palette.accentColor} opacity="0.9" />
+          <circle cx={isLeft ? 16 : 48} cy="16" r="1.7" fill="#0d1629" />
+          <circle cx={isLeft ? 26 : 38} cy="28" r="2.6" fill={palette.primaryColor} opacity="0.9" />
+          <circle cx={isLeft ? 26 : 38} cy="28" r="1.2" fill="#0d1629" />
+        </>
+      );
+    }
+    if (activePatternId === 'royal_filigree') {
+      return (
+        <path
+          d={
+            isLeft
+              ? 'M52 29 C 38 22, 24 14, 10 12 M48 37 C 34 34, 22 33, 12 31'
+              : 'M12 29 C 26 22, 40 14, 54 12 M16 37 C 30 34, 42 33, 52 31'
+          }
+          stroke="#FFBE0B"
+          strokeWidth="1.5"
+          strokeDasharray="3 2.5"
+          strokeLinecap="round"
+          opacity="0.9"
+        />
+      );
+    }
+    if (activePatternId === 'flame_streak') {
+      return (
+        <path
+          d={
+            isLeft
+              ? 'M42 22 L 16 11 M44 31 L 14 27'
+              : 'M22 22 L 48 11 M20 31 L 50 27'
+          }
+          stroke="#FFBE0B"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          opacity="0.88"
+        />
+      );
+    }
+    if (activePatternId === 'star_bolt') {
+      return (
+        <path
+          d={
+            isLeft
+              ? 'M20 14 L 22 18 L 26 19 L 22 21 L 20 25 L 18 21 L 14 19 L 18 18 Z'
+              : 'M44 14 L 46 18 L 50 19 L 46 21 L 44 25 L 42 21 L 38 19 L 42 18 Z'
+          }
+          fill="#FFFBEB"
+          opacity="0.92"
+        />
+      );
+    }
+    return null;
+  };
 
   return (
     <>
@@ -95,6 +184,7 @@ export const PhoenixWingPair: React.FC<PhoenixWingPairProps> = ({
             strokeLinecap="round"
             opacity="0.78"
           />
+          {renderPatternAccents('left')}
           {hasSpeedTrail && (
             <path
               d="M36 10 C 22 6, 10 4, 2 6"
@@ -150,6 +240,7 @@ export const PhoenixWingPair: React.FC<PhoenixWingPairProps> = ({
             strokeLinecap="round"
             opacity="0.78"
           />
+          {renderPatternAccents('right')}
           {hasSpeedTrail && (
             <path
               d="M28 10 C 42 6, 54 4, 62 6"
@@ -175,6 +266,7 @@ interface DilbazMascotProps {
   difficulty?: PhoenixDifficultyInput | null;
   showWings?: boolean;
   useEvolvedArt?: boolean;
+  visualsOverride?: ResolvedPhoenixVisuals;
 }
 
 export const DilbazMascot: React.FC<DilbazMascotProps> = ({
@@ -186,12 +278,13 @@ export const DilbazMascot: React.FC<DilbazMascotProps> = ({
   level,
   difficulty,
   showWings = true,
-  useEvolvedArt
+  useEvolvedArt,
+  visualsOverride
 }) => {
   const [bouncing, setBouncing] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
 
-  const visuals = resolveEquippedVisuals();
+  const visuals = visualsOverride || resolveEquippedVisuals();
 
   const handleTap = () => {
     playTone('tap');
@@ -202,7 +295,9 @@ export const DilbazMascot: React.FC<DilbazMascotProps> = ({
   };
 
   const auraRing =
-    visuals.auraId === 'aura_pomegranate_flame'
+    visuals.featherPaletteId !== 'ebru_classic'
+      ? `${visuals.ringGradient} shadow-[0_0_16px_${visuals.glowColor}80]`
+      : visuals.auraId === 'aura_pomegranate_flame'
       ? 'from-[#FF006E] via-[#FF5400] to-[#FFBE0B] shadow-[0_0_20px_rgba(255,0,110,0.6)]'
       : mood === 'excited'
       ? 'from-[#FFBE0B] via-[#FF006E] to-[#00F5D4] shadow-[0_0_18px_rgba(255,190,11,0.55)]'
@@ -237,6 +332,8 @@ export const DilbazMascot: React.FC<DilbazMascotProps> = ({
           auraId={visuals.auraId}
           auraRank={visuals.auraRank}
           talismanId={visuals.talismanId}
+          featherPaletteId={visuals.featherPaletteId}
+          wingPatternId={visuals.wingPatternId}
         />
       )}
 

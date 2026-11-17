@@ -1,5 +1,13 @@
 import React, { useId } from 'react';
-import { PhoenixComputedState, loadPhoenixProgress } from '../utils/phoenixProgression';
+import { UserProfile } from '../types/game';
+import {
+  PHOENIX_STAGES,
+  PhoenixComputedState,
+  PhoenixWingPattern,
+  getFeatherPalette,
+  getWingPattern,
+  loadPhoenixProgress
+} from '../utils/phoenixProgression';
 
 export interface ResolvedPhoenixVisuals {
   auraId: string;
@@ -8,6 +16,8 @@ export interface ResolvedPhoenixVisuals {
   talismanRank: number;
   crestId: string;
   crestRank: number;
+  featherPaletteId: string;
+  wingPatternId: PhoenixWingPattern['id'];
   ringGradient: string;
   glowColor: string;
   isEvolved: boolean;
@@ -23,16 +33,23 @@ export function resolveEquippedVisuals(phoenix?: PhoenixComputedState): Resolved
       : 0;
     const crestId = phoenix.activeCrest?.id || '';
     const crestRank = crestId ? phoenix.relics.find((r) => r.id === crestId)?.rank || 1 : 0;
+    const featherPaletteId = phoenix.activeFeatherPalette?.id || 'ebru_classic';
+    const wingPatternId = phoenix.activeWingPattern?.id || 'ebru_wave';
+    const palette = getFeatherPalette(featherPaletteId);
 
     const ringGradient =
-      auraId === 'aura_pomegranate_flame'
+      featherPaletteId !== 'ebru_classic'
+        ? palette.ringGradient
+        : auraId === 'aura_pomegranate_flame'
         ? 'from-[#FF006E] via-[#FF5400] to-[#FFBE0B]'
         : crestId === 'crest_celestial_halo'
         ? 'from-[#FFBE0B] via-[#00F5D4] to-[#FF006E]'
         : phoenix.stage.ringGradient;
 
     const glowColor =
-      auraId === 'aura_pomegranate_flame'
+      featherPaletteId !== 'ebru_classic'
+        ? palette.primaryColor
+        : auraId === 'aura_pomegranate_flame'
         ? '#FF006E'
         : crestId === 'crest_celestial_halo'
         ? '#FFBE0B'
@@ -45,6 +62,8 @@ export function resolveEquippedVisuals(phoenix?: PhoenixComputedState): Resolved
       talismanRank,
       crestId,
       crestRank,
+      featherPaletteId,
+      wingPatternId,
       ringGradient,
       glowColor,
       isEvolved: phoenix.stage.useEvolvedArt || crestId === 'crest_celestial_halo'
@@ -58,16 +77,23 @@ export function resolveEquippedVisuals(phoenix?: PhoenixComputedState): Resolved
   const talismanRank = talismanId ? Math.max(1, prog.itemRanks[talismanId] || 1) : 0;
   const crestId = prog.equipped.crest || '';
   const crestRank = crestId ? Math.max(1, prog.itemRanks[crestId] || 1) : 0;
+  const featherPaletteId = prog.featherPaletteId || 'ebru_classic';
+  const wingPatternId = prog.wingPatternId || 'ebru_wave';
+  const palette = getFeatherPalette(featherPaletteId);
 
   const ringGradient =
-    auraId === 'aura_pomegranate_flame'
+    featherPaletteId !== 'ebru_classic'
+      ? palette.ringGradient
+      : auraId === 'aura_pomegranate_flame'
       ? 'from-[#FF006E] via-[#FF5400] to-[#FFBE0B]'
       : crestId === 'crest_celestial_halo'
       ? 'from-[#FFBE0B] via-[#00F5D4] to-[#FF006E]'
       : 'from-[#00F5D4] via-[#3A86FF] to-[#FFBE0B]';
 
   const glowColor =
-    auraId === 'aura_pomegranate_flame'
+    featherPaletteId !== 'ebru_classic'
+      ? palette.primaryColor
+      : auraId === 'aura_pomegranate_flame'
       ? '#FF006E'
       : crestId === 'crest_celestial_halo'
       ? '#FFBE0B'
@@ -80,9 +106,59 @@ export function resolveEquippedVisuals(phoenix?: PhoenixComputedState): Resolved
     talismanRank,
     crestId,
     crestRank,
+    featherPaletteId,
+    wingPatternId,
     ringGradient,
     glowColor,
     isEvolved: crestId === 'crest_celestial_halo'
+  };
+}
+
+export function resolveVisualsFromPublicProfile(
+  profile?: Partial<UserProfile> | null
+): ResolvedPhoenixVisuals {
+  const auraId = profile?.phoenixAuraId || 'aura_ebru_cyan';
+  const talismanId = profile?.phoenixTalismanId || '';
+  const crestId = profile?.phoenixCrestId || '';
+  const featherPaletteId = profile?.phoenixPaletteId || 'ebru_classic';
+  const wingPatternId = getWingPattern(profile?.phoenixPatternId).id;
+  const palette = getFeatherPalette(featherPaletteId);
+  const level = profile?.phoenixLevel ?? 1;
+  const stage =
+    PHOENIX_STAGES.find((s) => s.id === profile?.phoenixStageId) ||
+    PHOENIX_STAGES.filter((s) => level >= s.minLevel).slice(-1)[0] ||
+    PHOENIX_STAGES[0];
+
+  const ringGradient =
+    featherPaletteId !== 'ebru_classic'
+      ? palette.ringGradient
+      : auraId === 'aura_pomegranate_flame'
+      ? 'from-[#FF006E] via-[#FF5400] to-[#FFBE0B]'
+      : crestId === 'crest_celestial_halo'
+      ? 'from-[#FFBE0B] via-[#00F5D4] to-[#FF006E]'
+      : stage.ringGradient;
+
+  const glowColor =
+    featherPaletteId !== 'ebru_classic'
+      ? palette.primaryColor
+      : auraId === 'aura_pomegranate_flame'
+      ? '#FF006E'
+      : crestId === 'crest_celestial_halo'
+      ? '#FFBE0B'
+      : '#00F5D4';
+
+  return {
+    auraId,
+    auraRank: 1,
+    talismanId,
+    talismanRank: talismanId ? 1 : 0,
+    crestId,
+    crestRank: crestId ? 1 : 0,
+    featherPaletteId,
+    wingPatternId,
+    ringGradient,
+    glowColor,
+    isEvolved: stage.useEvolvedArt || crestId === 'crest_celestial_halo' || level >= 8
   };
 }
 

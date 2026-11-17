@@ -2,6 +2,10 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { Friendship, Room, RoomInvite, UserProfile } from '../types/game';
 import { KilimAvatar } from './KilimAvatar';
+import { DilbazMascot } from './DilbazMascot';
+import { resolveVisualsFromPublicProfile } from './PhoenixEquippedVisuals';
+import { PHOENIX_STAGES } from '../utils/phoenixProgression';
+import { fetchPublicProfilesMap } from '../firebase/authService';
 import { PWAInstallButton } from './PWAInstallButton';
 import {
   sendFriendRequestByEmail,
@@ -80,6 +84,32 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
   const [testPushFeedback, setTestPushFeedback] = useState<string | null>(null);
   const [bgPushDevices, setBgPushDevices] = useState<number>(0);
   const [isSyncingPush, setIsSyncingPush] = useState(false);
+  const [profilesByUid, setProfilesByUid] = useState<Record<string, UserProfile>>({});
+
+  useEffect(() => {
+    if (!authUser) {
+      setProfilesByUid({});
+      return;
+    }
+    const uids = new Set<string>();
+    friendships.forEach((f) => {
+      if (f.requesterUid && f.requesterUid !== authUser.uid) uids.add(f.requesterUid);
+      if (f.recipientUid && f.recipientUid !== authUser.uid) uids.add(f.recipientUid);
+    });
+    incomingInvites.forEach((inv) => {
+      if (inv.senderUid && inv.senderUid !== authUser.uid) uids.add(inv.senderUid);
+    });
+    if (uids.size === 0) return;
+    let cancelled = false;
+    fetchPublicProfilesMap(Array.from(uids)).then((map) => {
+      if (!cancelled) {
+        setProfilesByUid(map);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, friendships, incomingInvites]);
 
   useEffect(() => {
     if (!authUser) {
@@ -471,7 +501,17 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <KilimAvatar avatar={invite.senderAvatar} size={42} />
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <DilbazMascot
+                        size={38}
+                        showWings={false}
+                        level={profilesByUid[invite.senderUid]?.phoenixLevel || 1}
+                        visualsOverride={resolveVisualsFromPublicProfile(
+                          profilesByUid[invite.senderUid]
+                        )}
+                      />
+                      <KilimAvatar avatar={invite.senderAvatar} size={32} />
+                    </div>
                     <div className="min-w-0 space-y-0.5">
                       <div className="text-sm font-bold text-white truncate">
                         {invite.senderName} seni yarışmaya çağırıyor!
@@ -610,7 +650,17 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
                   className="p-3.5 rounded-2xl bg-[#0d1629]/85 border border-white/12 flex flex-wrap items-center justify-between gap-3"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <KilimAvatar avatar={req.requesterAvatar} size={40} />
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <DilbazMascot
+                        size={36}
+                        showWings={false}
+                        level={profilesByUid[req.requesterUid]?.phoenixLevel || 1}
+                        visualsOverride={resolveVisualsFromPublicProfile(
+                          profilesByUid[req.requesterUid]
+                        )}
+                      />
+                      <KilimAvatar avatar={req.requesterAvatar} size={32} />
+                    </div>
                     <div className="min-w-0">
                       <div className="text-sm font-bold text-white truncate">
                         {req.requesterName}
@@ -697,11 +747,31 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <KilimAvatar avatar={friend.avatar} size={42} />
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {(() => {
+                        const fp = profilesByUid[friend.uid];
+                        const fpLevel = fp?.phoenixLevel || 1;
+                        return (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <DilbazMascot
+                              size={38}
+                              showWings={false}
+                              level={fpLevel}
+                              visualsOverride={resolveVisualsFromPublicProfile(fp)}
+                              title={`${friend.name} Zümrüdüankası`}
+                            />
+                            <KilimAvatar avatar={friend.avatar} size={30} />
+                          </div>
+                        );
+                      })()}
                       <div className="min-w-0">
-                        <div className="text-sm font-bold text-white truncate">
-                          {friend.name}
+                        <div className="text-sm font-bold text-white truncate flex items-center gap-1.5">
+                          <span className="truncate">{friend.name}</span>
+                          {profilesByUid[friend.uid] && (
+                            <span className="text-[9.5px] px-1.5 py-0.5 rounded-full bg-[#00F5D4]/15 text-[#00F5D4] font-bold shrink-0">
+                              Sv.{profilesByUid[friend.uid].phoenixLevel || 1}
+                            </span>
+                          )}
                         </div>
                         {wasDeclined && !isInActiveRoom ? (
                           <div className="text-[11px] text-rose-300 font-semibold">
@@ -712,7 +782,15 @@ export const FriendsPanel: React.FC<FriendsPanelProps> = ({
                             Davet gönderildi · Yanıt bekleniyor
                           </div>
                         ) : (
-                          <div className="text-[11px] text-[#06D6A0]">Arkadaş</div>
+                          <div className="text-[11px] text-[#06D6A0]">
+                            {(() => {
+                              const fp = profilesByUid[friend.uid];
+                              const stage =
+                                fp?.phoenixStageId &&
+                                PHOENIX_STAGES.find((s) => s.id === fp.phoenixStageId)?.name;
+                              return stage || 'Arkadaş';
+                            })()}
+                          </div>
                         )}
                       </div>
                     </div>

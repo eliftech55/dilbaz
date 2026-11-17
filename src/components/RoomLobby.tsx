@@ -7,6 +7,7 @@ import { PhoenixHeroHub } from './PhoenixHeroHub';
 import { PhoenixComputedState } from '../utils/phoenixProgression';
 import { AppTab } from './Navbar';
 import { playTone } from '../utils/soundEffects';
+import { safeCopyText } from '../utils/safeStorage';
 import {
   InvitedRoomStatusInfo,
   formatInviteDateTime
@@ -246,7 +247,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
   const copyCode = () => {
     if (!room) return;
     playTone('tap');
-    navigator.clipboard.writeText(room.code);
+    void safeCopyText(room.code);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
   };
@@ -259,7 +260,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
     if (!room) return;
     playTone('tap');
     const url = getActiveShareUrl(room.code);
-    navigator.clipboard.writeText(url);
+    void safeCopyText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
   };
