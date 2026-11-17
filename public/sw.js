@@ -1,10 +1,38 @@
-// Dilbaz Service Worker — Offline shell, Web Push (when app/APK is closed), monochrome badge & sound
-const CACHE_NAME = 'dilbaz-shell-v4';
+// Dilbaz Service Worker — Offline shell, Web Push (when app/APK is closed), app icon badge & sound
+const CACHE_NAME = 'dilbaz-shell-v5';
 const PRECACHE_ASSETS = [
+  './manifest.webmanifest',
   './pwa-192x192.png',
+  './pwa-512x512.png',
   './pwa-badge-96x96.png',
   './sounds/dilbaz-bildirim.wav'
 ];
+
+let lastSwBadgeCount = 0;
+
+async function syncServiceWorkerBadge(count) {
+  const safeCount = Math.max(0, Math.floor(Number.isFinite(count) ? count : 0));
+  lastSwBadgeCount = safeCount;
+  try {
+    const nav = self.navigator;
+    if (!nav) return false;
+    if (safeCount > 0 && typeof nav.setAppBadge === 'function') {
+      try {
+        await nav.setAppBadge(safeCount);
+      } catch {
+        await nav.setAppBadge().catch(() => undefined);
+      }
+      return true;
+    }
+    if (safeCount === 0 && typeof nav.clearAppBadge === 'function') {
+      await nav.clearAppBadge().catch(() => undefined);
+      return true;
+    }
+  } catch {
+    // ignore unsupported badge API
+  }
+  return false;
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -78,7 +106,7 @@ self.addEventListener('push', (event) => {
   const roomCode = payload.roomCode || undefined;
   const tab = payload.tab || (roomCode ? 'room' : 'friends');
   const tag = payload.tag || `dilbaz_push_${Date.now()}`;
-  const badgeCount = typeof payload.badgeCount === 'number' ? payload.badgeCount : undefined;
+  const rawBadgeCount = typeof payload.badgeCount === 'number' ? payload.badgeCount : undefined;
 
   const iconUrl = new URL('./pwa-192x192.png', self.registration.scope).href;
   const badgeUrl = new URL('./pwa-badge-96x96.png', self.registration.scope).href;
@@ -89,19 +117,21 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     (async () => {
-      try {
-        if (typeof badgeCount === 'number' && self.navigator && typeof self.navigator.setAppBadge === 'function') {
-          if (badgeCount > 0) {
-            await self.navigator.setAppBadge(badgeCount).catch(() => undefined);
-          }
-        } else if (self.navigator && typeof self.navigator.setAppBadge === 'function') {
-          await self.navigator.setAppBadge(1).catch(() => undefined);
-        }
-      } catch {
-        // ignore unsupported badge API
-      }
+      const existingNotifs = await self.registration.getNotifications().catch(() => []);
+      const sameTagExists = existingNotifs.some((n) => n.tag && n.tag === tag);
+      const nextActiveCount = existingNotifs.length + (sameTagExists ? 0 : 1);
+      const resolvedBadgeCount =
+        rawBadgeCount === 0
+          ? 0
+          : Math.max(
+              typeof rawBadgeCount === 'number' ? rawBadgeCount : 1,
+              nextActiveCount,
+              lastSwBadgeCount > 0 ? lastSwBadgeCount + (sameTagExists ? 0 : 1) : 1
+            );
 
-      // Ask any visible open clients to chime Dilbaz custom notification sound
+      await syncServiceWorkerBadge(resolvedBadgeCount);
+
+      // Ask any open clients to chime Dilbaz custom notification sound & sync badge state
       const clientList = await self.clients.matchAll({
         type: 'window',
         includeUncontrolled: true
@@ -110,11 +140,18 @@ self.addEventListener('push', (event) => {
       for (const client of clientList) {
         if (client.visibilityState === 'visible') {
           hasVisibleClient = true;
-          client.postMessage({
-            type: 'DILBAZ_PUSH_RECEIVED',
-            payload: { title, body, roomCode, tab, tag }
-          });
         }
+        client.postMessage({
+          type: 'DILBAZ_PUSH_RECEIVED',
+          payload: {
+            title,
+            body,
+            roomCode,
+            tab,
+            tag,
+            badgeCount: resolvedBadgeCount
+          }
+        });
       }
 
       await self.registration.showNotification(title, {
@@ -130,7 +167,8 @@ self.addEventListener('push', (event) => {
           roomCode,
           tab,
           url: targetUrl,
-          hasVisibleClient
+          hasVisibleClient,
+          badgeCount: resolvedBadgeCount
         }
       });
     })()
@@ -139,18 +177,9 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'DILBAZ_SET_BADGE') {
-    const count = typeof event.data.count === 'number' ? Math.max(0, Math.floor(event.data.count)) : 0;
-    try {
-      if (self.navigator) {
-        if (count > 0 && typeof self.navigator.setAppBadge === 'function') {
-          self.navigator.setAppBadge(count).catch(() => undefined);
-        } else if (typeof self.navigator.clearAppBadge === 'function') {
-          self.navigator.clearAppBadge().catch(() => undefined);
-        }
-      }
-    } catch {
-      // ignore unsupported badge API
-    }
+    const count =
+      typeof event.data.count === 'number' ? Math.max(0, Math.floor(event.data.count)) : 0;
+    event.waitUntil(syncServiceWorkerBadge(count));
   }
 });
 
@@ -180,6 +209,19 @@ self.addEventListener('pushsubscriptionchange', (event) => {
         }
       } catch {
         // ignore silent background refresh failures
+      }
+    })()
+  );
+});
+
+self.addEventListener('notificationclose', (event) => {
+  event.waitUntil(
+    (async () => {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      if (clients.length > 0) return;
+      const remaining = await self.registration.getNotifications().catch(() => []);
+      if (remaining.length === 0) {
+        await syncServiceWorkerBadge(0);
       }
     })()
   );

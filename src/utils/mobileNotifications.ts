@@ -19,18 +19,35 @@ export interface RemotePushDispatchPayload extends MobilePushPayload {
 }
 
 const BASE_URL = import.meta.env.BASE_URL || '/';
+const BASE_DOCUMENT_TITLE = 'Dilbaz - Telaffuz ve Diksiyon Oyunları';
 
 let registeredSwPromise: Promise<ServiceWorkerRegistration | null> | null = null;
+let lastAppliedBadgeCount = 0;
+let swControllerListenerAttached = false;
 
 export function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     return Promise.resolve(null);
+  }
+  if (!swControllerListenerAttached) {
+    swControllerListenerAttached = true;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (lastAppliedBadgeCount > 0) {
+        void setAppBadgeCount(lastAppliedBadgeCount, { force: true });
+      }
+    });
   }
   if (!registeredSwPromise) {
     registeredSwPromise = navigator.serviceWorker
       .register(`${BASE_URL}sw.js`, { scope: BASE_URL })
       .then((reg) => {
         reg.update().catch(() => undefined);
+        if (lastAppliedBadgeCount > 0) {
+          reg.active?.postMessage({
+            type: 'DILBAZ_SET_BADGE',
+            count: lastAppliedBadgeCount
+          });
+        }
         return reg;
       })
       .catch((err) => {
@@ -293,9 +310,11 @@ export async function sendMobilePushNotification(
 ): Promise<boolean> {
   vibrateMobileDevice([180, 80, 220]);
   playDilbazNotificationSound();
-  if (typeof payload.badgeCount === 'number') {
-    setAppBadgeCount(payload.badgeCount);
-  }
+  const nextBadgeCount =
+    typeof payload.badgeCount === 'number'
+      ? Math.max(0, Math.floor(payload.badgeCount))
+      : Math.max(1, lastAppliedBadgeCount);
+  void setAppBadgeCount(nextBadgeCount, { force: true });
 
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return false;
@@ -388,6 +407,10 @@ export function subscribeToNotificationClicks(
     } else if (event.data?.type === 'DILBAZ_PUSH_RECEIVED') {
       playDilbazNotificationSound();
       vibrateMobileDevice([180, 80, 220]);
+      const pushBadgeCount = event.data?.payload?.badgeCount;
+      if (typeof pushBadgeCount === 'number') {
+        void setAppBadgeCount(pushBadgeCount, { force: true });
+      }
     }
   };
 
@@ -405,39 +428,95 @@ export function subscribeToNotificationClicks(
   };
 }
 
-export function setAppBadgeCount(count: number): void {
-  const safeCount = Math.max(0, Math.floor(count || 0));
+type BadgingNavigator = Navigator & {
+  setAppBadge?: (count?: number) => Promise<void>;
+  clearAppBadge?: () => Promise<void>;
+  setClientBadge?: (count?: number) => Promise<void>;
+  clearClientBadge?: () => Promise<void>;
+};
+
+export function getBadgeSupportState(): {
+  supported: boolean;
+  isStandalone: boolean;
+  count: number;
+} {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return { supported: false, isStandalone: false, count: 0 };
+  }
+  const nav = navigator as BadgingNavigator;
+  const supported =
+    typeof nav.setAppBadge === 'function' || typeof nav.setClientBadge === 'function';
+  const isStandalone =
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    (window.navigator as { standalone?: boolean }).standalone === true;
+  return {
+    supported,
+    isStandalone,
+    count: lastAppliedBadgeCount
+  };
+}
+
+export async function setAppBadgeCount(
+  count: number,
+  options?: { force?: boolean }
+): Promise<boolean> {
+  const safeCount = Math.max(0, Math.floor(Number.isFinite(count) ? count : 0));
+  const unchanged = safeCount === lastAppliedBadgeCount;
+  lastAppliedBadgeCount = safeCount;
+
+  if (typeof document !== 'undefined') {
+    document.title =
+      safeCount > 0 ? `(${safeCount}) ${BASE_DOCUMENT_TITLE}` : BASE_DOCUMENT_TITLE;
+  }
+
+  if (unchanged && !options?.force) {
+    return true;
+  }
+
+  let applied = false;
   try {
     if (typeof navigator !== 'undefined') {
-      const nav = navigator as Navigator & {
-        setAppBadge?: (count?: number) => Promise<void>;
-        clearAppBadge?: () => Promise<void>;
-      };
-      if (safeCount > 0 && typeof nav.setAppBadge === 'function') {
-        nav.setAppBadge(safeCount).catch(() => {});
-      } else if (typeof nav.clearAppBadge === 'function') {
-        nav.clearAppBadge().catch(() => {});
+      const nav = navigator as BadgingNavigator;
+      if (safeCount > 0) {
+        if (typeof nav.setAppBadge === 'function') {
+          await nav.setAppBadge(safeCount).catch(async () => {
+            await nav.setAppBadge?.().catch(() => undefined);
+          });
+          applied = true;
+        } else if (typeof nav.setClientBadge === 'function') {
+          await nav.setClientBadge(safeCount).catch(() => undefined);
+          applied = true;
+        }
+      } else {
+        if (typeof nav.clearAppBadge === 'function') {
+          await nav.clearAppBadge().catch(() => undefined);
+          applied = true;
+        } else if (typeof nav.clearClientBadge === 'function') {
+          await nav.clearClientBadge().catch(() => undefined);
+          applied = true;
+        }
       }
 
       if ('serviceWorker' in navigator) {
+        const msg = { type: 'DILBAZ_SET_BADGE', count: safeCount };
         if (navigator.serviceWorker.controller) {
-          navigator.serviceWorker.controller.postMessage({
-            type: 'DILBAZ_SET_BADGE',
-            count: safeCount
-          });
+          navigator.serviceWorker.controller.postMessage(msg);
         } else {
           navigator.serviceWorker.ready
             .then((reg) => {
-              reg.active?.postMessage({
-                type: 'DILBAZ_SET_BADGE',
-                count: safeCount
-              });
+              reg.active?.postMessage(msg);
             })
             .catch(() => {});
         }
       }
     }
   } catch {
-    // ignore
+    // ignore unsupported environments
   }
+
+  return applied;
+}
+
+export function clearAppBadgeCount(): Promise<boolean> {
+  return setAppBadgeCount(0, { force: true });
 }
