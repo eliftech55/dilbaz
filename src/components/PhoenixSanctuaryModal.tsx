@@ -15,6 +15,7 @@ import {
   X,
   Sparkles,
   Shield,
+  ShieldCheck,
   Flame,
   Crown,
   Zap,
@@ -127,7 +128,7 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
     const res = unlockOrEquipRelic(relicId, userProfile);
     if (res.ok) {
       playTone('correct');
-      setFeedback('Kuşanıldı!');
+      setFeedback('Öge aktif edildi!');
       onProgressUpdated();
     } else {
       playTone('wrong');
@@ -620,14 +621,19 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
                             setPreviewRelicId(null);
                             handleEquipOrUnlock(item.id);
                           }}
-                          className={`min-h-[34px] px-3 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
+                          title={item.equipped ? 'Aktif öge' : 'Ögeyi kuşan'}
+                          aria-label={item.equipped ? `${item.name} aktif` : `${item.name} kuşan`}
+                          className={`min-h-[34px] px-3 py-1 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer ${
                             item.equipped
                               ? 'bg-[#06D6A0]/20 text-[#06D6A0] border border-[#06D6A0]/45'
                               : 'bg-white/10 hover:bg-white/20 text-white'
                           }`}
                         >
-                          {item.equipped && <Check className="w-3.5 h-3.5" />}
-                          <span>{item.equipped ? 'Kuşanılı' : 'Kuşan'}</span>
+                          {item.equipped ? (
+                            <ShieldCheck className="w-4 h-4" />
+                          ) : (
+                            <span>Kuşan</span>
+                          )}
                         </button>
                       </>
                     ) : (
