@@ -615,6 +615,7 @@ export const GameArena: React.FC<GameArenaProps> = ({
           originalWords={wordsForDisplay}
           spokenTranscript={spokenTranscript}
           isListening={isListening}
+          audioLevel={audioLevel}
           liveAccuracy={liveAccuracy}
           categoryLabel={tekerleme.categoryLabel || 'Tekerleme Arenası'}
           justMatchedIndices={justMatchedIndices}

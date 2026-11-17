@@ -211,14 +211,19 @@ export class SpeechEngine {
         this.pulseInterval = setInterval(() => {
           if (!this.isListening) return;
           const timeSinceActivity = Date.now() - this.lastActivityAt;
-          if (timeSinceActivity < 600) {
-            const level = Math.round(45 + Math.random() * 50);
+          if (this.lastActivityAt > 0 && timeSinceActivity < 280) {
+            const wave = Math.sin(Date.now() / 75) * 14;
+            const level = Math.min(98, Math.max(52, Math.round(72 + wave + Math.random() * 14)));
+            callbacks.onAudioLevelChange?.(level);
+          } else if (this.lastActivityAt > 0 && timeSinceActivity < 560) {
+            const decayRatio = 1 - (timeSinceActivity - 280) / 280;
+            const level = Math.round(16 + decayRatio * 34);
             callbacks.onAudioLevelChange?.(level);
           } else {
-            const idleLevel = Math.round(12 + Math.random() * 15);
+            const idleLevel = Math.round(8 + Math.random() * 8);
             callbacks.onAudioLevelChange?.(idleLevel);
           }
-        }, 120);
+        }, 85);
       }
 
       return true;
@@ -257,6 +262,14 @@ export class SpeechEngine {
       this.lastActivityAt = now;
       if (!this.firstAudioAt) this.firstAudioAt = now;
       if (!this.firstSpeechAt) this.firstSpeechAt = now;
+    };
+
+    recognition.onspeechend = () => {
+      this.lastActivityAt = Math.min(this.lastActivityAt, Date.now() - 320);
+    };
+
+    recognition.onsoundend = () => {
+      this.lastActivityAt = Math.min(this.lastActivityAt, Date.now() - 400);
     };
 
     recognition.onresult = (event: any) => {

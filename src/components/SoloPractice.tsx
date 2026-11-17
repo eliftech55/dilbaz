@@ -370,6 +370,7 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
         originalWords={wordsForDisplay}
         spokenTranscript={spokenTranscript}
         isListening={isListening}
+        audioLevel={audioLevel}
         liveAccuracy={liveAccuracy}
         categoryLabel={selectedTekerleme.categoryLabel || selectedTekerleme.title}
       />
