@@ -61,18 +61,32 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
     setTimeout(() => triggerCelebration({ xRatio: 0.7, yRatio: 0.3, count: 40 }), 350);
   }, []);
 
+  const isOverallWinner = Boolean(authUid && room.winnerId === authUid);
+  const isBotToppedHumanLeader = Boolean(
+    authUid && room.winnerId?.startsWith('bot-') && room.topHumanWinnerId === authUid
+  );
+  const myRoomPlayer = room.players.find((p) => p.id === currentUserId);
+  const isBotToppedZeroScore = Boolean(
+    authUid &&
+      room.players.length >= 2 &&
+      room.winnerId?.startsWith('bot-') &&
+      !room.topHumanWinnerId &&
+      myRoomPlayer &&
+      (myRoomPlayer.totalPoints || 0) === 0
+  );
+
   useEffect(() => {
     if (
       room.status !== 'game_over' ||
       room.players.length < 2 ||
       !authUid ||
-      room.winnerId !== authUid
+      (!isOverallWinner && !isBotToppedHumanLeader)
     ) {
       return;
     }
 
     const dynamicRewardPoints = Math.max(2, room.players.length) * POINTS_PER_PLAYER_MULTIPLAYER_WIN;
-    const attemptKey = `${room.code}_${authUid}`;
+    const attemptKey = `${room.code}_${authUid}_${isOverallWinner ? 'win' : 'bot_human'}`;
     if (claimedRef.current === attemptKey) return;
     claimedRef.current = attemptKey;
     setWinRewardError(null);
@@ -80,16 +94,22 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
     claimMultiplayerWinReward(room.code, authUid, room.players.length)
       .then((res) => {
         if (res.claimed) {
-          setWinRewardMessage(
-            `Tebrikler! Oda 1. liği ödülü olarak +${res.pointsAdded || dynamicRewardPoints} Dilbaz Liderlik Puanı hesabınıza eklendi!`
-          );
+          if (res.rewardMode === 'bot_topped_human') {
+            setWinRewardMessage(
+              `Botlara karşı yarışmayı gerçek oyuncular arasında 1. tamamladığınız için +${res.pointsAdded} Dilbaz Liderlik Puanı hesabınıza eklendi! (Botu geçerseniz +${dynamicRewardPoints} tam 1. lik ödülü kazanırsınız.)`
+            );
+          } else {
+            setWinRewardMessage(
+              `Tebrikler! Oda 1. liği ödülü olarak +${res.pointsAdded || dynamicRewardPoints} Dilbaz Liderlik Puanı hesabınıza eklendi!`
+            );
+          }
         } else if (res.alreadyClaimed) {
           setWinRewardMessage(
-            `Bu odanın 1. lik ödülü (+${res.pointsAdded || dynamicRewardPoints} Puan) hesabınıza eklendi.`
+            `Bu odanın ödülü (+${res.pointsAdded || dynamicRewardPoints} Puan) hesabınıza eklendi.`
           );
         } else if (res.reason === 'solo_left') {
           setWinRewardError(
-            'Odada tek başınıza kaldığınız için (diğer oyuncular ayrıldığı için) oda 1. liği puanı verilmemektedir.'
+            'Odada tek başınıza kaldığınız için (diğer oyuncular ayrıldığı için) oda puanı verilmemektedir.'
           );
         } else if (res.reason === 'no_profile') {
           setWinRewardError(
@@ -100,13 +120,22 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
       .catch((err: any) => {
         console.error('Win reward claim error:', err);
         setWinRewardError(
-          '1. lik ödülü kaydedilirken bir bağlantı veya izin hatası oluştu. Sayfayı yenilemeden tekrar deneyebilirsiniz.'
+          'Ödül puanı kaydedilirken bir bağlantı veya izin hatası oluştu. Sayfayı yenilemeden tekrar deneyebilirsiniz.'
         );
       });
-  }, [room.code, room.status, room.players.length, room.winnerId, authUid]);
+  }, [
+    room.code,
+    room.status,
+    room.players.length,
+    room.winnerId,
+    room.topHumanWinnerId,
+    authUid,
+    isOverallWinner,
+    isBotToppedHumanLeader
+  ]);
 
-  const isWinnerGuest =
-    room.players.length >= 2 && winner?.id === currentUserId && !authUid;
+  const isGuestParticipant =
+    room.players.length >= 2 && Boolean(myRoomPlayer) && !authUid;
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 animate-screen-in">
@@ -144,9 +173,15 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
           </div>
         )}
 
-        {isWinnerGuest && (
+        {isBotToppedZeroScore && (
           <div className="mt-3 p-3 rounded-2xl bg-[#FFBE0B]/15 border border-[#FFBE0B]/40 text-[#FDE68A] text-xs">
-            Bilgi: Oda 1. liklerinden +{Math.max(2, room.players.length) * POINTS_PER_PLAYER_MULTIPLAYER_WIN} Liderlik Puanı (Oyuncu Sayısı × {POINTS_PER_PLAYER_MULTIPLAYER_WIN}) kazanmak için yarışma öncesi giriş yapın.
+            Bilgi: Liderlik puanı kazanmak için en az bir turda konuşarak puan almalısınız.
+          </div>
+        )}
+
+        {isGuestParticipant && (
+          <div className="mt-3 p-3 rounded-2xl bg-[#FFBE0B]/15 border border-[#FFBE0B]/40 text-[#FDE68A] text-xs">
+            Bilgi: Oda yarışmalarından +{Math.max(2, room.players.length) * POINTS_PER_PLAYER_MULTIPLAYER_WIN} Liderlik Puanı (Oyuncu Sayısı × {POINTS_PER_PLAYER_MULTIPLAYER_WIN}) kazanmak için yarışma öncesi giriş yapın.
           </div>
         )}
       </div>

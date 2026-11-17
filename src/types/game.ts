@@ -113,6 +113,7 @@ export interface Room {
   settings: RoomSettings;
   currentTekerleme?: Tekerleme;
   winnerId?: string;
+  topHumanWinnerId?: string;
   participantIds?: string[];
   invitedUids?: string[];
   updatedAt?: number;

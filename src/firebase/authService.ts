@@ -34,6 +34,7 @@ import { syncMyEmailDirectory } from './friendsFirestore';
 export const ADMIN_EMAIL = 'elifgencosmanoglu@gmail.com';
 export const POINTS_FOR_APPROVED_TEKERLEME = 100;
 export const POINTS_PER_PLAYER_MULTIPLAYER_WIN = 20;
+export const POINTS_BOT_DUEL_COMPLETION = 20;
 
 /**
  * Normalizes a custom username into a Firestore-safe document ID matching ^[a-zA-Z0-9_.\-@]+$
@@ -345,7 +346,13 @@ export async function claimMultiplayerWinReward(
   roomCode: string,
   uid: string,
   playerCount: number
-): Promise<{ claimed: boolean; alreadyClaimed?: boolean; reason?: string; pointsAdded: number }> {
+): Promise<{
+  claimed: boolean;
+  alreadyClaimed?: boolean;
+  reason?: string;
+  pointsAdded: number;
+  rewardMode?: 'winner' | 'bot_topped_human';
+}> {
   if (playerCount <= 1) {
     return { claimed: false, reason: 'solo_left', pointsAdded: 0 };
   }
@@ -366,21 +373,40 @@ export async function claimMultiplayerWinReward(
       const existingPoints =
         Number(claimSnap.data()?.pointsAwarded) ||
         Math.max(2, playerCount) * POINTS_PER_PLAYER_MULTIPLAYER_WIN;
-      return { claimed: false, alreadyClaimed: true, pointsAdded: existingPoints };
+      return {
+        claimed: false,
+        alreadyClaimed: true,
+        pointsAdded: existingPoints,
+        rewardMode: existingPoints >= 40 ? 'winner' : 'bot_topped_human'
+      };
     }
     if (!profileSnap.exists()) {
       return { claimed: false, reason: 'no_profile', pointsAdded: 0 };
     }
 
-    const livePlayerCount = roomSnap.exists()
-      ? (Array.isArray(roomSnap.data()?.players) ? roomSnap.data().players.length : playerCount)
+    const roomData = roomSnap.exists() ? roomSnap.data() : null;
+    const livePlayerCount = roomData
+      ? (Array.isArray(roomData.players) ? roomData.players.length : playerCount)
       : playerCount;
 
     if (livePlayerCount <= 1) {
       return { claimed: false, reason: 'solo_left', pointsAdded: 0 };
     }
 
-    const dynamicPoints = livePlayerCount * POINTS_PER_PLAYER_MULTIPLAYER_WIN;
+    const liveWinnerId = typeof roomData?.winnerId === 'string' ? roomData.winnerId : '';
+    const liveTopHumanWinnerId =
+      typeof roomData?.topHumanWinnerId === 'string' ? roomData.topHumanWinnerId : '';
+    const isFullWinner = !liveWinnerId || liveWinnerId === uid;
+    const isBotToppedHumanLeader =
+      liveWinnerId.startsWith('bot-') && liveTopHumanWinnerId === uid;
+
+    if (!isFullWinner && !isBotToppedHumanLeader) {
+      return { claimed: false, reason: 'not_eligible', pointsAdded: 0 };
+    }
+
+    const dynamicPoints = isFullWinner
+      ? livePlayerCount * POINTS_PER_PLAYER_MULTIPLAYER_WIN
+      : POINTS_BOT_DUEL_COMPLETION;
     const currentProfile = profileSnap.data() as UserProfile;
     const now = Date.now();
     const batch = writeBatch(db);
@@ -394,13 +420,17 @@ export async function claimMultiplayerWinReward(
 
     batch.update(profileRef, {
       points: (currentProfile.points || 0) + dynamicPoints,
-      multiplayerWins: (currentProfile.multiplayerWins || 0) + 1,
+      multiplayerWins: (currentProfile.multiplayerWins || 0) + (isFullWinner ? 1 : 0),
       lastClaimId: claimId,
       updatedAt: now
     });
 
     await batch.commit();
-    return { claimed: true, pointsAdded: dynamicPoints };
+    return {
+      claimed: true,
+      pointsAdded: dynamicPoints,
+      rewardMode: isFullWinner ? 'winner' : 'bot_topped_human'
+    };
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `winClaims/${claimId}`);
   }

@@ -683,18 +683,23 @@ export class RoomFirestore {
       }
 
       // Auto-submit simulated scores for any bot players in the room if not yet scored this round
-      const botSkills: ('pro' | 'mid' | 'novice')[] = ['pro', 'mid', 'novice'];
+      const botSkills: ('novice' | 'mid' | 'pro')[] = ['novice', 'mid', 'pro'];
       if (roomData.currentTekerleme) {
-        (roomData.players || []).forEach((p, idx) => {
-          if (p.id.startsWith('bot-') && !existingScores.some((s) => s.playerId === p.id)) {
-            const botResult = generateBotScore(
-              roomData.currentTekerleme!,
-              p.name,
-              p.avatar,
-              botSkills[idx % botSkills.length]
-            );
-            botResult.playerId = p.id;
-            existingScores.push(botResult);
+        let botOrder = 0;
+        (roomData.players || []).forEach((p) => {
+          if (p.id.startsWith('bot-')) {
+            const skill = botSkills[botOrder % botSkills.length];
+            botOrder += 1;
+            if (!existingScores.some((s) => s.playerId === p.id)) {
+              const botResult = generateBotScore(
+                roomData.currentTekerleme!,
+                p.name,
+                p.avatar,
+                skill
+              );
+              botResult.playerId = p.id;
+              existingScores.push(botResult);
+            }
           }
         });
       }
@@ -812,15 +817,26 @@ export class RoomFirestore {
       if (!isHost && !isAuto) return;
 
       if (roomData.currentRound >= roomData.totalRounds) {
-        const sorted = [...(roomData.players || [])].sort(
-          (a, b) => (b.totalPoints || 0) - (a.totalPoints || 0)
-        );
+        const sorted = [...(roomData.players || [])].sort((a, b) => {
+          const diff = (b.totalPoints || 0) - (a.totalPoints || 0);
+          if (diff !== 0) return diff;
+          const aIsBot = a.id.startsWith('bot-') ? 1 : 0;
+          const bIsBot = b.id.startsWith('bot-') ? 1 : 0;
+          return aIsBot - bIsBot;
+        });
         const topWinnerId = sorted[0]?.id || '';
+        const topHuman = sorted.find(
+          (p) => !p.id.startsWith('bot-') && (p.totalPoints || 0) > 0
+        );
+        const topHumanWinnerId =
+          topHuman && topWinnerId.startsWith('bot-') ? topHuman.id : '';
+
         tx.update(
           roomRef,
           deepCleanForFirestore({
             status: 'game_over',
             winnerId: topWinnerId,
+            topHumanWinnerId,
             updatedAt: Date.now()
           })
         );
@@ -919,6 +935,7 @@ export class RoomFirestore {
         currentTekerleme: cleanTekerleme,
         status: 'in_round',
         winnerId: '',
+        topHumanWinnerId: '',
         hostLeftAutoMode: false,
         players,
         roundScores: { 1: [] },
@@ -1120,5 +1137,67 @@ export class RoomFirestore {
         updatedAt: Date.now()
       })
     );
+  }
+
+  /**
+   * Migrates a guest player ID to their signed-in Firebase UID while still in waiting lobby
+   */
+  public static async migrateGuestPlayerToAuth(
+    code: string,
+    guestId: string,
+    authUid: string,
+    authName: string,
+    authAvatar: string
+  ): Promise<void> {
+    if (!code || !guestId || !authUid || guestId === authUid) return;
+    const normalizedCode = code.trim().toUpperCase();
+    const roomRef = doc(db, 'rooms', normalizedCode);
+
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(roomRef);
+      if (!snap.exists()) return;
+
+      const roomData = snap.data() as Room;
+      if (roomData.status !== 'waiting') return;
+
+      const hasGuest = (roomData.players || []).some((p) => p.id === guestId);
+      const alreadyHasAuth = (roomData.players || []).some((p) => p.id === authUid);
+      if (!hasGuest || alreadyHasAuth) return;
+
+      const players = (roomData.players || []).map((p) =>
+        p.id === guestId
+          ? {
+              ...p,
+              id: authUid,
+              name: authName || p.name,
+              avatar: authAvatar || p.avatar
+            }
+          : p
+      );
+
+      const hostId = roomData.hostId === guestId ? authUid : roomData.hostId;
+      const originalHostId =
+        roomData.originalHostId === guestId ? authUid : roomData.originalHostId;
+      const hostName = roomData.hostId === guestId ? authName || roomData.hostName : roomData.hostName;
+      const participantIds = Array.from(
+        new Set(
+          (roomData.participantIds || [])
+            .map((id) => (id === guestId ? authUid : id))
+            .concat(authUid)
+        )
+      ).slice(0, 50);
+
+      tx.update(
+        roomRef,
+        deepCleanForFirestore({
+          players,
+          hostId,
+          originalHostId,
+          hostName,
+          participantIds,
+          updatedAt: Date.now()
+        })
+      );
+    });
   }
 }

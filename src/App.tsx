@@ -727,6 +727,21 @@ export default function App() {
   }, [room?.code]);
 
   useEffect(() => {
+    if (!authUser || !room || room.status !== 'waiting') return;
+    const hasGuest = room.players.some((p) => p.id === guestUser.id);
+    const hasAuth = room.players.some((p) => p.id === authUser.uid);
+    if (hasGuest && !hasAuth) {
+      void RoomFirestore.migrateGuestPlayerToAuth(
+        room.code,
+        guestUser.id,
+        authUser.uid,
+        currentUser.name,
+        currentUser.avatar
+      ).catch(() => undefined);
+    }
+  }, [authUser, room, guestUser.id, currentUser.name, currentUser.avatar]);
+
+  useEffect(() => {
     safeLocalSet('dilbaz_tekerlemeler_v2', JSON.stringify(localTekerlemeler));
   }, [localTekerlemeler]);
 

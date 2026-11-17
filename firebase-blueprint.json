@@ -69,6 +69,10 @@
           "type": "string",
           "description": "Player UID of 1st place winner when game_over"
         },
+        "topHumanWinnerId": {
+          "type": "string",
+          "description": "Top-scoring human player UID when a simulated bot placed 1st overall"
+        },
         "updatedAt": {
           "type": "number",
           "description": "Timestamp of last modification"

@@ -387,14 +387,14 @@ export function generateBotScore(
   let baseAccuracy = 80;
 
   if (botSkill === 'pro') {
-    baseDuration = benchmark * (0.8 + Math.random() * 0.25);
-    baseAccuracy = 88 + Math.floor(Math.random() * 12);
+    baseDuration = benchmark * (0.88 + Math.random() * 0.25);
+    baseAccuracy = 84 + Math.floor(Math.random() * 11);
   } else if (botSkill === 'mid') {
-    baseDuration = benchmark * (0.95 + Math.random() * 0.4);
-    baseAccuracy = 72 + Math.floor(Math.random() * 20);
+    baseDuration = benchmark * (1.05 + Math.random() * 0.35);
+    baseAccuracy = 68 + Math.floor(Math.random() * 17);
   } else {
-    baseDuration = benchmark * (1.2 + Math.random() * 0.6);
-    baseAccuracy = 55 + Math.floor(Math.random() * 25);
+    baseDuration = benchmark * (1.3 + Math.random() * 0.5);
+    baseAccuracy = 52 + Math.floor(Math.random() * 22);
   }
 
   const safeDuration = Number(baseDuration.toFixed(1));
