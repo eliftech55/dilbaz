@@ -253,6 +253,41 @@
         "updatedAt": { "type": "number" }
       },
       "required": ["id", "uid", "endpoint", "updatedAt"]
+    },
+    "PracticeAttempt": {
+      "title": "PracticeAttempt",
+      "description": "Individual solo practice rehearsal record for history and progress tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "tekerlemeId": { "type": "string", "maxLength": 128 },
+        "tekerlemeTitle": { "type": "string", "maxLength": 120 },
+        "difficulty": { "type": "string", "enum": ["kolay", "orta", "zor", "efsane"] },
+        "accuracy": { "type": "number" },
+        "wpm": { "type": "number" },
+        "durationSeconds": { "type": "number" },
+        "speedScore": { "type": "number" },
+        "totalScore": { "type": "number" },
+        "xpEarned": { "type": "number" },
+        "sparksEarned": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": [
+        "id",
+        "uid",
+        "tekerlemeId",
+        "tekerlemeTitle",
+        "difficulty",
+        "accuracy",
+        "wpm",
+        "durationSeconds",
+        "speedScore",
+        "totalScore",
+        "xpEarned",
+        "sparksEarned",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -303,6 +338,10 @@
     "/pushSubscriptions/{subId}": {
       "schema": "PushSubscription",
       "description": "Owner-only registered Web Push device endpoints"
+    },
+    "/practiceAttempts/{attemptId}": {
+      "schema": "PracticeAttempt",
+      "description": "Owner-only individual solo practice rehearsal logs"
     }
   }
 }

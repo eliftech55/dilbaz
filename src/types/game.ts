@@ -167,3 +167,18 @@ export interface RoomInvite {
   updatedAt: number;
 }
 
+export interface PracticeAttempt {
+  id: string;
+  uid?: string;
+  tekerlemeId: string;
+  tekerlemeTitle: string;
+  difficulty: Difficulty;
+  accuracy: number;
+  wpm: number;
+  durationSeconds: number;
+  speedScore: number;
+  totalScore: number;
+  xpEarned: number;
+  sparksEarned: number;
+  createdAt: number;
+}

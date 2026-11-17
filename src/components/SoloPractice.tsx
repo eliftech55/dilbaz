@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Difficulty, Tekerleme } from '../types/game';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Difficulty, PracticeAttempt, Tekerleme } from '../types/game';
 import { INITIAL_TEKERLEMELER } from '../data/tekerlemeler';
 import { SpeechEngine } from '../utils/speechEngine';
 import { evaluateSpeech, alignLiveWords, EvaluationResult } from '../utils/scoreCalculator';
@@ -9,39 +9,114 @@ import { MascotDialogue } from './DilbazMascot';
 import { triggerCelebration } from './FxCanvas';
 import { playTone, playComboWordTone } from '../utils/soundEffects';
 import { recordPracticeOrRoundReward } from '../utils/phoenixProgression';
-import { Mic, Volume2, Shuffle, Sparkles, Radio, Timer } from 'lucide-react';
+import {
+  clearPracticeHistory,
+  deletePracticeAttempt,
+  loadLocalPracticeHistory,
+  mergePracticeHistories,
+  recordPracticeAttempt,
+  saveLocalPracticeHistory,
+  subscribeToPracticeHistory
+} from '../firebase/practiceFirestore';
+import { PracticeProgressPanel } from './PracticeProgressPanel';
+import { Mic, Volume2, Shuffle, Sparkles, Radio, Timer, RotateCcw } from 'lucide-react';
 
 interface SoloPracticeProps {
   tekerlemeler: Tekerleme[];
   initialTekerlemeId?: string;
   phoenixLevel?: number;
+  authUid?: string | null;
   onDifficultyChange?: (difficulty: Difficulty) => void;
   onPhoenixProgressUpdated?: () => void;
+}
+
+const DIFFICULTY_OPTIONS: Array<{
+  id: Difficulty;
+  label: string;
+  activeClass: string;
+}> = [
+  {
+    id: 'kolay',
+    label: 'Kolay',
+    activeClass: 'bg-[#06D6A0] text-[#0d1629] border-[#06D6A0] shadow-sm'
+  },
+  {
+    id: 'orta',
+    label: 'Orta',
+    activeClass: 'bg-[#3A86FF] text-white border-[#3A86FF] shadow-sm'
+  },
+  {
+    id: 'zor',
+    label: 'Zor',
+    activeClass: 'bg-[#FFBE0B] text-[#0d1629] border-[#FFBE0B] shadow-sm'
+  },
+  {
+    id: 'efsane',
+    label: 'Efsane',
+    activeClass: 'bg-[#FF006E] text-white border-[#FF006E] shadow-sm'
+  }
+];
+
+function pickRandomFromPool(pool: Tekerleme[], excludeId?: string): Tekerleme | null {
+  if (pool.length === 0) return null;
+  const candidates =
+    pool.length > 1 && excludeId ? pool.filter((t) => t.id !== excludeId) : pool;
+  const targetPool = candidates.length > 0 ? candidates : pool;
+  const idx = Math.floor(Math.random() * targetPool.length);
+  return targetPool[idx] || pool[0];
 }
 
 export const SoloPractice: React.FC<SoloPracticeProps> = ({
   tekerlemeler,
   initialTekerlemeId,
   phoenixLevel,
+  authUid,
   onDifficultyChange,
   onPhoenixProgressUpdated
 }) => {
+  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>(() => {
+    if (initialTekerlemeId) {
+      const match = tekerlemeler.find((t) => t.id === initialTekerlemeId);
+      if (match) return match.difficulty;
+    }
+    return 'kolay';
+  });
+
   const [selectedTekerleme, setSelectedTekerleme] = useState<Tekerleme>(() => {
     if (initialTekerlemeId) {
       const match = tekerlemeler.find((t) => t.id === initialTekerlemeId);
       if (match) return match;
     }
-    return tekerlemeler[0] || INITIAL_TEKERLEMELER[0];
+    const easyPool = tekerlemeler.filter((t) => t.difficulty === 'kolay');
+    return (
+      pickRandomFromPool(easyPool) ||
+      pickRandomFromPool(tekerlemeler) ||
+      INITIAL_TEKERLEMELER[0]
+    );
   });
+
   const [isListening, setIsListening] = useState(false);
   const [spokenTranscript, setSpokenTranscript] = useState('');
   const [audioLevel, setAudioLevel] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
-  const [practiceReward, setPracticeReward] = useState<{ xpEarned: number; sparksEarned: number } | null>(null);
+  const [practiceReward, setPracticeReward] = useState<{
+    xpEarned: number;
+    sparksEarned: number;
+  } | null>(null);
+  const [previousComparison, setPreviousComparison] = useState<{
+    accuracyDelta: number;
+    wpmDelta: number;
+    comparedWithSame: boolean;
+  } | null>(null);
   const [elapsed, setElapsed] = useState<number>(0);
   const [autoStopStatus, setAutoStopStatus] = useState<string | null>(null);
 
+  const [practiceHistory, setPracticeHistory] = useState<PracticeAttempt[]>(() =>
+    loadLocalPracticeHistory(authUid)
+  );
+
+  const stageTopRef = useRef<HTMLDivElement | null>(null);
   const speechEngineRef = useRef<SpeechEngine | null>(null);
   const timerRef = useRef<any>(null);
   const startTimeRef = useRef<number>(0);
@@ -51,19 +126,64 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
   const transcriptRef = useRef<string>('');
   const prevCorrectCountRef = useRef<number>(0);
   const streakPlayedRef = useRef<boolean>(false);
+  const historyRef = useRef<PracticeAttempt[]>(practiceHistory);
+  historyRef.current = practiceHistory;
 
-  const maxReadingSeconds = Math.max(15, Math.ceil(selectedTekerleme.benchmarkSeconds * 2.5));
+  const filteredPool = useMemo(() => {
+    const byDiff = tekerlemeler.filter((t) => t.difficulty === selectedDifficulty);
+    return byDiff.length > 0 ? byDiff : tekerlemeler;
+  }, [tekerlemeler, selectedDifficulty]);
+
+  const difficultyCounts = useMemo(() => {
+    const counts: Record<Difficulty, number> = {
+      kolay: 0,
+      orta: 0,
+      zor: 0,
+      efsane: 0
+    };
+    for (const item of tekerlemeler) {
+      counts[item.difficulty] = (counts[item.difficulty] || 0) + 1;
+    }
+    return counts;
+  }, [tekerlemeler]);
+
+  const maxReadingSeconds = Math.max(
+    15,
+    Math.ceil(selectedTekerleme.benchmarkSeconds * 2.5)
+  );
 
   useEffect(() => {
     onDifficultyChange?.(selectedTekerleme.difficulty);
   }, [selectedTekerleme.difficulty, onDifficultyChange]);
 
+  // Load local + Firestore practice history for current user scope
+  useEffect(() => {
+    const localInitial = loadLocalPracticeHistory(authUid);
+    setPracticeHistory(localInitial);
+
+    if (!authUid) return;
+
+    const unsubscribe = subscribeToPracticeHistory(authUid, (remoteAttempts) => {
+      const merged = mergePracticeHistories(remoteAttempts, loadLocalPracticeHistory(authUid));
+      saveLocalPracticeHistory(merged, authUid);
+      setPracticeHistory(merged);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [authUid]);
+
   useEffect(() => {
     if (initialTekerlemeId) {
       const found = tekerlemeler.find((t) => t.id === initialTekerlemeId);
       if (found) {
+        setSelectedDifficulty(found.difficulty);
         setSelectedTekerleme(found);
         setEvaluation(null);
+        setPracticeReward(null);
+        setPreviousComparison(null);
+        setAutoStopStatus(null);
         transcriptRef.current = '';
         setSpokenTranscript('');
       }
@@ -77,9 +197,66 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
     };
   }, []);
 
+  const resetActiveAttemptState = () => {
+    hasStoppedRef.current = true;
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (isListening && speechEngineRef.current) {
+      speechEngineRef.current.stop();
+    }
+    setIsListening(false);
+    setEvaluation(null);
+    setPracticeReward(null);
+    setPreviousComparison(null);
+    setAutoStopStatus(null);
+    setMicError(null);
+    transcriptRef.current = '';
+    setSpokenTranscript('');
+    setElapsed(0);
+  };
+
+  const handleSelectDifficulty = (difficulty: Difficulty) => {
+    playTone('tap');
+    resetActiveAttemptState();
+    setSelectedDifficulty(difficulty);
+    const pool = tekerlemeler.filter((t) => t.difficulty === difficulty);
+    const picked = pickRandomFromPool(pool.length > 0 ? pool : tekerlemeler, selectedTekerleme.id);
+    if (picked) {
+      setSelectedTekerleme(picked);
+    }
+  };
+
+  const handlePickRandom = () => {
+    playTone('hint');
+    resetActiveAttemptState();
+    const picked = pickRandomFromPool(filteredPool, selectedTekerleme.id);
+    if (picked) {
+      setSelectedTekerleme(picked);
+    }
+  };
+
+  const handleReplayFromHistory = (tekerlemeId: string, difficulty: Difficulty) => {
+    resetActiveAttemptState();
+    const exactMatch = tekerlemeler.find((t) => t.id === tekerlemeId);
+    if (exactMatch) {
+      setSelectedDifficulty(exactMatch.difficulty);
+      setSelectedTekerleme(exactMatch);
+    } else {
+      setSelectedDifficulty(difficulty);
+      const fallbackPool = tekerlemeler.filter((t) => t.difficulty === difficulty);
+      const picked = pickRandomFromPool(fallbackPool.length > 0 ? fallbackPool : tekerlemeler);
+      if (picked) setSelectedTekerleme(picked);
+    }
+    stageTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const handleStartPractice = async () => {
     playTone('round_start');
     setEvaluation(null);
+    setPracticeReward(null);
+    setPreviousComparison(null);
     setAutoStopStatus(null);
     transcriptRef.current = '';
     setSpokenTranscript('');
@@ -176,6 +353,20 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
     const result = evaluateSpeech(selectedTekerleme, textToEvaluate, duration);
     setEvaluation(result);
 
+    // Compare against prior attempt (prefer same tekerleme, else latest attempt overall)
+    const priorHistory = historyRef.current;
+    const samePrevious = priorHistory.find((a) => a.tekerlemeId === selectedTekerleme.id);
+    const baseline = samePrevious || priorHistory[0] || null;
+    if (baseline) {
+      setPreviousComparison({
+        accuracyDelta: result.accuracy - baseline.accuracy,
+        wpmDelta: result.wpm - baseline.wpm,
+        comparedWithSame: Boolean(samePrevious)
+      });
+    } else {
+      setPreviousComparison(null);
+    }
+
     const reward = recordPracticeOrRoundReward({
       source: 'solo',
       accuracy: result.accuracy,
@@ -184,6 +375,26 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
     });
     setPracticeReward({ xpEarned: reward.xpEarned, sparksEarned: reward.sparksEarned });
     onPhoenixProgressUpdated?.();
+
+    // Persist attempt to local + Firestore history
+    try {
+      const savedAttempt = await recordPracticeAttempt({
+        uid: authUid,
+        tekerlemeId: selectedTekerleme.id,
+        tekerlemeTitle: selectedTekerleme.title,
+        difficulty: selectedTekerleme.difficulty,
+        accuracy: result.accuracy,
+        wpm: result.wpm,
+        durationSeconds: result.durationSeconds,
+        speedScore: result.speedScore,
+        totalScore: result.totalScore,
+        xpEarned: reward.xpEarned,
+        sparksEarned: reward.sparksEarned
+      });
+      setPracticeHistory((prev) => mergePracticeHistories([savedAttempt], prev));
+    } catch (err) {
+      console.error('Prova geçmişi kaydedilemedi:', err);
+    }
 
     if (result.accuracy >= 75) {
       playTone('victory');
@@ -206,14 +417,23 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
     }
   };
 
-  const handlePickRandom = () => {
-    playTone('hint');
-    if (tekerlemeler.length === 0) return;
-    const randomIdx = Math.floor(Math.random() * tekerlemeler.length);
-    setSelectedTekerleme(tekerlemeler[randomIdx]);
-    setEvaluation(null);
-    transcriptRef.current = '';
-    setSpokenTranscript('');
+  const handleDeleteAttempt = async (attemptId: string) => {
+    setPracticeHistory((prev) => prev.filter((item) => item.id !== attemptId));
+    try {
+      await deletePracticeAttempt({ attemptId, uid: authUid });
+    } catch (err) {
+      console.error('Prova silinemedi:', err);
+    }
+  };
+
+  const handleClearHistory = async () => {
+    const currentList = [...practiceHistory];
+    setPracticeHistory([]);
+    try {
+      await clearPracticeHistory({ attempts: currentList, uid: authUid });
+    } catch (err) {
+      console.error('Prova geçmişi temizlenemedi:', err);
+    }
   };
 
   const { words: wordsForDisplay, liveAccuracy } = alignLiveWords(
@@ -293,7 +513,7 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
   }, [isListening]);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 animate-screen-in">
+    <div ref={stageTopRef} className="max-w-3xl mx-auto space-y-5 animate-screen-in">
       {/* Compact Visual Header */}
       <div className="flex items-center justify-between gap-3 px-1">
         <div>
@@ -309,41 +529,85 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
         </div>
       </div>
 
-      {/* Tekerleme Selector Strip */}
-      <div className="p-4 ebru-glass-card rounded-[24px] flex flex-wrap items-center justify-between gap-3">
-        <div className="flex-1 min-w-[200px]">
-          <label className="text-[11px] font-semibold text-[#93C5FD] block mb-1">
-            Çalışmak İstediğiniz Tekerleme
-          </label>
-          <select
-            value={selectedTekerleme.id}
-            onChange={(e) => {
-              const found = tekerlemeler.find((t) => t.id === e.target.value);
-              if (found) {
-                playTone('tap');
-                setSelectedTekerleme(found);
-                setEvaluation(null);
-                transcriptRef.current = '';
-                setSpokenTranscript('');
-              }
-            }}
-            className="w-full px-3 py-2.5 bg-[#0d1629]/90 border border-white/15 rounded-xl text-white text-xs sm:text-sm focus:border-[#FFBE0B] focus:outline-none"
+      {/* Difficulty Picker + Random Tekerleme Pool */}
+      <div className="p-4 sm:p-5 ebru-glass-card rounded-[24px] space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div>
+            <div className="text-xs font-semibold text-white">
+              Zorluk Seviyesi Seçin
+            </div>
+            <div className="text-[11px] text-[#94A3B8]">
+              Seçtiğiniz seviyeden rastgele tekerleme gelir · {filteredPool.length} tekerleme hazır
+            </div>
+          </div>
+
+          <div
+            role="group"
+            aria-label="Tekerleme zorluk seviyesi"
+            className="grid grid-cols-4 gap-1.5 p-1 rounded-2xl bg-[#0d1629]/90 border border-white/10"
           >
-            {tekerlemeler.map((t) => (
-              <option key={t.id} value={t.id}>
-                [{t.difficulty.toUpperCase()}] {t.title}
-              </option>
-            ))}
-          </select>
+            {DIFFICULTY_OPTIONS.map((opt) => {
+              const active = selectedDifficulty === opt.id;
+              const count = difficultyCounts[opt.id] || 0;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => handleSelectDifficulty(opt.id)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer border flex items-center justify-center gap-1 ${
+                    active
+                      ? opt.activeClass
+                      : 'border-transparent text-[#CBD5E1] hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <span>{opt.label}</span>
+                  <span className={`text-[10px] font-mono tabular-nums ${active ? 'opacity-80' : 'text-[#64748B]'}`}>
+                    ({count})
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        <button
-          onClick={handlePickRandom}
-          className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-[#3A86FF]/25 text-xs font-semibold text-white border border-white/15 transition-colors cursor-pointer self-end"
-        >
-          <Shuffle className="w-3.5 h-3.5 text-[#FFBE0B]" />
-          <span>Rastgele</span>
-        </button>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/10">
+          <div className="flex-1 min-w-[200px]">
+            <label
+              htmlFor="solo-tekerleme-select"
+              className="text-[11px] font-semibold text-[#93C5FD] block mb-1"
+            >
+              Aktif Tekerleme ({DIFFICULTY_OPTIONS.find((d) => d.id === selectedDifficulty)?.label} Havuzu)
+            </label>
+            <select
+              id="solo-tekerleme-select"
+              value={selectedTekerleme.id}
+              onChange={(e) => {
+                const found = filteredPool.find((t) => t.id === e.target.value);
+                if (found) {
+                  playTone('tap');
+                  resetActiveAttemptState();
+                  setSelectedTekerleme(found);
+                }
+              }}
+              className="w-full px-3 py-2.5 bg-[#0d1629]/90 border border-white/15 rounded-xl text-white text-xs sm:text-sm focus:border-[#FFBE0B] focus:outline-none"
+            >
+              {filteredPool.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={handlePickRandom}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-[#3A86FF]/25 text-xs font-semibold text-white border border-white/15 transition-colors cursor-pointer self-end whitespace-nowrap"
+          >
+            <Shuffle className="w-3.5 h-3.5 text-[#FFBE0B]" />
+            <span>Yeni Rastgele Tekerleme</span>
+          </button>
+        </div>
       </div>
 
       {/* Mascot Dialogue Tip + Listen Button */}
@@ -357,6 +621,7 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
           />
         </div>
         <button
+          type="button"
           onClick={handlePlayAudioHint}
           className="p-3 rounded-2xl bg-[#14213D]/90 hover:bg-[#3A86FF]/25 border border-[#3A86FF]/40 text-[#FFBE0B] shrink-0 transition-colors cursor-pointer"
           title="Sesli Dinle"
@@ -385,10 +650,11 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
         </div>
       )}
 
-      {/* Action Controls (no manual stop button — auto-completes on finish, silence, or timeout) */}
+      {/* Action Controls */}
       <div className="flex flex-col sm:flex-row gap-3">
         {!isListening ? (
           <button
+            type="button"
             onClick={handleStartPractice}
             className="flex-1 min-h-[52px] py-4 rounded-[20px] btn-epic-pomegranate font-bold text-sm sm:text-base flex items-center justify-center gap-2 cursor-pointer"
           >
@@ -444,6 +710,18 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
               <h2 className="text-lg font-bold text-white font-display">
                 {evaluation.badge || 'Pratik Tamamlandı'}
               </h2>
+              {previousComparison && (
+                <div className="text-[11px] text-[#CBD5E1] font-mono tabular-nums mt-0.5">
+                  {previousComparison.comparedWithSame ? 'Bu tekerlemedeki son denemeye göre: ' : 'Önceki provaya göre: '}
+                  <span className={previousComparison.accuracyDelta >= 0 ? 'text-[#06D6A0]' : 'text-[#FF006E]'}>
+                    {previousComparison.accuracyDelta >= 0 ? `+${previousComparison.accuracyDelta}` : previousComparison.accuracyDelta}% doğruluk
+                  </span>
+                  {' · '}
+                  <span className={previousComparison.wpmDelta >= 0 ? 'text-[#00F5D4]' : 'text-[#FFBE0B]'}>
+                    {previousComparison.wpmDelta >= 0 ? `+${previousComparison.wpmDelta}` : previousComparison.wpmDelta} WPM
+                  </span>
+                </div>
+              )}
             </div>
             <div className="text-right">
               <div className="text-sm font-display font-bold text-[#FFBE0B] tabular-nums">
@@ -504,8 +782,35 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
               </div>
             </div>
           )}
+
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-white/10">
+            <button
+              type="button"
+              onClick={handleStartPractice}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-white border border-white/15 transition-colors cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-[#06D6A0]" />
+              <span>Aynı Tekerlemeyi Tekrarla</span>
+            </button>
+            <button
+              type="button"
+              onClick={handlePickRandom}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#3A86FF] hover:bg-[#3A86FF]/90 text-xs font-semibold text-white transition-colors cursor-pointer"
+            >
+              <Shuffle className="w-3.5 h-3.5 text-[#FFBE0B]" />
+              <span>Sonraki Rastgele Tekerleme</span>
+            </button>
+          </div>
         </div>
       )}
+
+      {/* Progress Tracking & Rehearsal History */}
+      <PracticeProgressPanel
+        attempts={practiceHistory}
+        onReplayTekerleme={handleReplayFromHistory}
+        onDeleteAttempt={handleDeleteAttempt}
+        onClearHistory={handleClearHistory}
+      />
     </div>
   );
 };

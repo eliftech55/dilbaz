@@ -143,6 +143,32 @@ service cloud.firestore {
         && data.updatedAt is number;
     }
 
+    function isValidPracticeAttempt(data) {
+      return data.keys().hasAll([
+          'id', 'uid', 'tekerlemeId', 'tekerlemeTitle', 'difficulty',
+          'accuracy', 'wpm', 'durationSeconds', 'speedScore', 'totalScore',
+          'xpEarned', 'sparksEarned', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'uid', 'tekerlemeId', 'tekerlemeTitle', 'difficulty',
+          'accuracy', 'wpm', 'durationSeconds', 'speedScore', 'totalScore',
+          'xpEarned', 'sparksEarned', 'createdAt'
+        ])
+        && data.id is string && data.id.size() >= 3 && data.id.size() <= 128
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.tekerlemeId is string && data.tekerlemeId.size() >= 1 && data.tekerlemeId.size() <= 128
+        && data.tekerlemeTitle is string && data.tekerlemeTitle.size() >= 1 && data.tekerlemeTitle.size() <= 120
+        && data.difficulty in ['kolay', 'orta', 'zor', 'efsane']
+        && data.accuracy is number && data.accuracy >= 0 && data.accuracy <= 100
+        && data.wpm is number && data.wpm >= 0 && data.wpm <= 500
+        && data.durationSeconds is number && data.durationSeconds >= 0 && data.durationSeconds <= 600
+        && data.speedScore is number && data.speedScore >= 0 && data.speedScore <= 100
+        && data.totalScore is number && data.totalScore >= 0 && data.totalScore <= 10000
+        && data.xpEarned is number && data.xpEarned >= 0 && data.xpEarned <= 1000
+        && data.sparksEarned is number && data.sparksEarned >= 0 && data.sparksEarned <= 1000
+        && data.createdAt is number;
+    }
+
     // Default deny safety net
     match /{document=**} {
       allow read, write: if false;
@@ -433,6 +459,19 @@ service cloud.firestore {
         && existing().uid == request.auth.uid
         && incoming().uid == existing().uid;
       allow delete: if isSignedIn() && isValidId(subId) && existing().uid == request.auth.uid;
+    }
+
+    // Owner-only solo practice rehearsal logs
+    match /practiceAttempts/{attemptId} {
+      allow get: if isSignedIn() && isValidId(attemptId) && (resource == null || existing().uid == request.auth.uid);
+      allow list: if isSignedIn() && existing().uid == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(attemptId)
+        && isValidPracticeAttempt(incoming())
+        && incoming().id == attemptId
+        && incoming().uid == request.auth.uid;
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(attemptId) && existing().uid == request.auth.uid;
     }
   }
 }

@@ -1659,6 +1659,7 @@ export default function App() {
               tekerlemeler={tekerlemeler}
               initialTekerlemeId={selectedPracticeTekerlemeId}
               phoenixLevel={phoenixState.level}
+              authUid={authUser?.uid || null}
               onDifficultyChange={setSoloDifficulty}
               onPhoenixProgressUpdated={() => setPhoenixVersion((v) => v + 1)}
             />
