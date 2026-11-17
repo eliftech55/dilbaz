@@ -808,10 +808,12 @@ export default function App() {
 
   const handleAddBotPlayer = async () => {
     if (!room) return;
+    setRoomError(null);
     try {
       await RoomFirestore.addTestBot(room.code);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.warn('Add bot error:', err);
+      setRoomError(err?.message || 'Test botu eklenemedi.');
     }
   };
 
@@ -826,13 +828,17 @@ export default function App() {
 
   const handleStartGame = async () => {
     if (!room) return;
+    if ((room.players || []).length < 2) {
+      setRoomError('Yarışmayı başlatmak için en az 2 oyuncu (veya test botu) gerekiyor!');
+      return;
+    }
     setRoomError(null);
     try {
       await RoomFirestore.startGame(room.code, currentUser.id, tekerlemeler);
       setCurrentRoundUserScore(null);
     } catch (err: any) {
-      console.error('Start game error:', err);
-      setRoomError(err.message || 'Oyun başlatılamadı');
+      console.warn('Start game validation:', err?.message || err);
+      setRoomError(err?.message || 'Oyun başlatılamadı.');
     }
   };
 
