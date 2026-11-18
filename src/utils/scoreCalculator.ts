@@ -39,7 +39,11 @@ interface AlignmentOutput {
  * Unified optimal monotonic DP alignment algorithm shared by live display and final evaluation.
  * Handles 1-to-1, 1-to-2, 1-to-3 (mobile split words), and 2-to-1 (merged words) without lookahead jumping/shifting.
  */
-function alignWordsCore(originalText: string, spokenTranscript: string): AlignmentOutput {
+function alignWordsCore(
+  originalText: string,
+  spokenTranscript: string,
+  liveMode: boolean = false
+): AlignmentOutput {
   const rawTokens = originalText.split(/\s+/).filter(Boolean);
   const pairs = rawTokens
     .map((raw) => ({ raw, norm: normalizeSingleWord(raw) }))
@@ -62,13 +66,16 @@ function alignWordsCore(originalText: string, spokenTranscript: string): Alignme
     };
   }
 
+  const activeImperfectThreshold = liveMode ? 0.48 : IMPERFECT_THRESHOLD;
+  const activeMerge21Threshold = liveMode ? 0.66 : 0.72;
+
   type OpType = 'none' | 'match11' | 'match12' | 'match13' | 'match21' | 'skipOrig' | 'skipSpoken';
   const NEG_INF = -1e9;
   const dp: number[][] = Array.from({ length: M + 1 }, () => Array(N + 1).fill(NEG_INF));
   const op: OpType[][] = Array.from({ length: M + 1 }, () => Array<OpType>(N + 1).fill('none'));
   const simStore: number[][] = Array.from({ length: M + 1 }, () => Array(N + 1).fill(0));
 
-  const SKIP_ORIG_PENALTY = -0.45;
+  const SKIP_ORIG_PENALTY = liveMode ? -0.58 : -0.45;
   const SKIP_SPOKEN_PENALTY = -0.09;
 
   dp[0][0] = 0;
@@ -98,8 +105,21 @@ function alignWordsCore(originalText: string, spokenTranscript: string): Alignme
       }
 
       // 1-to-1 match: T[i-1] <-> S[s-1]
-      const sim11 = wordSimilarity(origWord, spokenNormWords[s - 1]);
-      if (sim11 >= IMPERFECT_THRESHOLD) {
+      const spokenWord = spokenNormWords[s - 1];
+      let sim11 = wordSimilarity(origWord, spokenWord);
+
+      // In live mode, the trailing interim word may be an in-progress prefix (e.g. "kürk" -> "kürkleri")
+      if (
+        liveMode &&
+        s === N &&
+        spokenWord.length >= 3 &&
+        origWord.startsWith(spokenWord) &&
+        sim11 < CORRECT_THRESHOLD
+      ) {
+        sim11 = Math.max(sim11, 0.72);
+      }
+
+      if (sim11 >= activeImperfectThreshold) {
         const reward11 = sim11 >= CORRECT_THRESHOLD ? 1.2 + sim11 : 0.45 + sim11;
         const candScore = dp[i - 1][s - 1] + reward11;
         if (candScore > bestScore) {
@@ -117,7 +137,7 @@ function alignWordsCore(originalText: string, spokenTranscript: string): Alignme
           wordSimilarity(origWord, spokenNormWords[s - 2]),
           sim11
         );
-        if (sim12 >= IMPERFECT_THRESHOLD && sim12 > singleBest + 0.05) {
+        if (sim12 >= activeImperfectThreshold && sim12 > singleBest + 0.05) {
           const reward12 = sim12 >= CORRECT_THRESHOLD ? 1.2 + sim12 : 0.45 + sim12;
           const candScore = dp[i - 1][s - 2] + reward12;
           if (candScore > bestScore) {
@@ -151,8 +171,8 @@ function alignWordsCore(originalText: string, spokenTranscript: string): Alignme
       // 2-to-1 match: T[i-2] + T[i-1] <-> S[s-1] (ASR merges two adjacent target words)
       if (i >= 2) {
         const mergedOrig = pairs[i - 2].norm + origWord;
-        const sim21 = wordSimilarity(mergedOrig, spokenNormWords[s - 1]);
-        if (sim21 >= CORRECT_THRESHOLD) {
+        const sim21 = wordSimilarity(mergedOrig, spokenWord);
+        if (sim21 >= activeMerge21Threshold) {
           const reward21 = 2.3 + sim21;
           const candScore = dp[i - 2][s - 1] + reward21;
           if (candScore > bestScore) {
@@ -284,7 +304,7 @@ export function alignLiveWords(
   originalText: string,
   spokenTranscript: string
 ): { words: LiveWordStatus[]; liveAccuracy: number } {
-  const { items, accuracy } = alignWordsCore(originalText, spokenTranscript);
+  const { items, accuracy } = alignWordsCore(originalText, spokenTranscript, true);
 
   const words: LiveWordStatus[] = items.map((item) => ({ ...item }));
   const nextPendingIdx = words.findIndex((w) => w.status === 'pending');

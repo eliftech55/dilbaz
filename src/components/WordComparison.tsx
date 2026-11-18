@@ -158,13 +158,17 @@ export const WordComparison: React.FC<WordComparisonProps> = ({
                 );
               } else if (isCurrent) {
                 style = isVoiceSpeaking
-                  ? 'bg-[#00F5D4]/22 text-white border-2 border-[#00F5D4]'
-                  : 'bg-[#3A86FF]/24 text-white border-2 border-[#00F5D4]/85';
+                  ? 'bg-[#00F5D4]/26 text-white border-2 border-[#FFBE0B]'
+                  : 'bg-[#3A86FF]/28 text-white border-2 border-[#00F5D4]';
                 // Voice-synchronized GPU transform, opacity & glow (never changes layout geometry!)
                 dynamicStyle = {
-                  transform: `translateZ(0) scale(${(1 + voiceEnergy * 0.032).toFixed(3)})`,
-                  opacity: Number((0.84 + voiceEnergy * 0.16).toFixed(2)),
-                  boxShadow: `0 0 ${Math.round(8 + voiceEnergy * 20)}px rgba(0, 245, 212, ${(0.22 + voiceEnergy * 0.56).toFixed(2)})`
+                  transform: `translateZ(0) scale(${(1.01 + voiceEnergy * 0.045).toFixed(3)})`,
+                  opacity: Number((0.88 + voiceEnergy * 0.12).toFixed(2)),
+                  boxShadow: `0 0 ${Math.round(10 + voiceEnergy * 24)}px ${
+                    isVoiceSpeaking
+                      ? `rgba(255, 190, 11, ${(0.35 + voiceEnergy * 0.5).toFixed(2)})`
+                      : `rgba(0, 245, 212, ${(0.28 + voiceEnergy * 0.45).toFixed(2)})`
+                  }`
                 };
               }
 
@@ -177,11 +181,28 @@ export const WordComparison: React.FC<WordComparisonProps> = ({
                   title={item.recognizedAs ? `Algılanan: "${item.recognizedAs}"` : undefined}
                 >
                   <span>{item.word}</span>
+                  {isCurrent && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-2.5 right-2.5 -bottom-[3px] h-[3px] rounded-full bg-gradient-to-r from-[#00F5D4] via-[#FFBE0B] to-[#00F5D4]"
+                    />
+                  )}
                   {statusBadge}
                 </span>
               );
             })}
           </div>
+
+          {isListening && (
+            <div className="mt-3 pt-2.5 border-t border-white/10 flex items-center gap-2 text-[11px] text-[#CBD5E1]">
+              <span className="font-semibold text-[#00F5D4] shrink-0">Algılanan:</span>
+              <span className="truncate font-mono text-[#E2E8F0]">
+                {spokenTranscript.trim()
+                  ? spokenTranscript
+                  : 'Sesiniz bekleniyor — net ve ritmik okuyun...'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

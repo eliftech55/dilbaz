@@ -96,6 +96,8 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
   });
 
   const [isListening, setIsListening] = useState(false);
+  const [isMicReady, setIsMicReady] = useState(false);
+  const [justMatchedIndices, setJustMatchedIndices] = useState<number[]>([]);
   const [spokenTranscript, setSpokenTranscript] = useState('');
   const [audioLevel, setAudioLevel] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
@@ -126,6 +128,8 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
   const transcriptRef = useRef<string>('');
   const prevCorrectCountRef = useRef<number>(0);
   const streakPlayedRef = useRef<boolean>(false);
+  const celebratedIndicesRef = useRef<Set<number>>(new Set());
+  const glowTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const historyRef = useRef<PracticeAttempt[]>(practiceHistory);
   historyRef.current = practiceHistory;
 
@@ -192,6 +196,7 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
 
   useEffect(() => {
     return () => {
+      glowTimersRef.current.forEach((t) => clearTimeout(t));
       if (timerRef.current) clearInterval(timerRef.current);
       if (speechEngineRef.current) speechEngineRef.current.stop();
     };
@@ -199,6 +204,9 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
 
   const resetActiveAttemptState = () => {
     hasStoppedRef.current = true;
+    glowTimersRef.current.forEach((t) => clearTimeout(t));
+    glowTimersRef.current = [];
+    celebratedIndicesRef.current.clear();
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -207,6 +215,8 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
       speechEngineRef.current.stop();
     }
     setIsListening(false);
+    setIsMicReady(false);
+    setJustMatchedIndices([]);
     setEvaluation(null);
     setPracticeReward(null);
     setPreviousComparison(null);
@@ -254,6 +264,11 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
 
   const handleStartPractice = async () => {
     playTone('round_start');
+    glowTimersRef.current.forEach((t) => clearTimeout(t));
+    glowTimersRef.current = [];
+    celebratedIndicesRef.current.clear();
+    setJustMatchedIndices([]);
+    setIsMicReady(false);
     setEvaluation(null);
     setPracticeReward(null);
     setPreviousComparison(null);
@@ -273,7 +288,8 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
 
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
-      const nextElapsed = (Date.now() - start) / 1000;
+      const baseStart = startTimeRef.current || start;
+      const nextElapsed = (Date.now() - baseStart) / 1000;
       setElapsed(nextElapsed);
       if (nextElapsed >= maxReadingSeconds && !hasStoppedRef.current) {
         setAutoStopStatus('Okuma süresi dolduğu için otomatik tamamlandı.');
@@ -287,6 +303,12 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
 
     const ok = await speechEngineRef.current.start({
       targetText: selectedTekerleme.text,
+      onAudioReady: () => {
+        setIsMicReady(true);
+        if (!speechStartedAtRef.current) {
+          startTimeRef.current = Date.now();
+        }
+      },
       onTranscriptChange: (text) => {
         if (text.trim()) {
           const now = Date.now();
@@ -334,6 +356,7 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
     }
 
     setIsListening(false);
+    setIsMicReady(false);
 
     let finalRecorded = '';
     if (speechEngineRef.current) {
@@ -441,9 +464,26 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
     spokenTranscript
   );
 
-  // Interactive rising word-match chimes during live practice
+  // Interactive rising word-match chimes & visual glow bursts during live practice
   useEffect(() => {
     if (!isListening) return;
+
+    const newlyMatched = wordsForDisplay
+      .map((w, idx) => ({ w, idx }))
+      .filter(({ w, idx }) => w.status === 'correct' && !celebratedIndicesRef.current.has(idx));
+
+    if (newlyMatched.length > 0) {
+      const addedIndices = newlyMatched.map((m) => m.idx);
+      addedIndices.forEach((idx) => celebratedIndicesRef.current.add(idx));
+      setJustMatchedIndices((prev) => Array.from(new Set([...prev, ...addedIndices])));
+
+      const matchedSet = new Set(addedIndices);
+      const t = setTimeout(() => {
+        setJustMatchedIndices((prev) => prev.filter((idx) => !matchedSet.has(idx)));
+      }, 480);
+      glowTimersRef.current.push(t);
+    }
+
     const correctCount = wordsForDisplay.filter((w) => w.status === 'correct').length;
     if (correctCount > prevCorrectCountRef.current) {
       playComboWordTone(correctCount);
@@ -638,6 +678,7 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
         audioLevel={audioLevel}
         liveAccuracy={liveAccuracy}
         categoryLabel={selectedTekerleme.categoryLabel || selectedTekerleme.title}
+        justMatchedIndices={justMatchedIndices}
       />
 
       {/* Audio Visualizer */}
@@ -665,10 +706,12 @@ export const SoloPractice: React.FC<SoloPracticeProps> = ({
           <div className="flex-1 p-4 rounded-[22px] ebru-glass-card border border-[#06D6A0]/45 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2.5 min-w-0">
-                <Radio className="w-5 h-5 text-[#06D6A0] animate-pulse shrink-0" />
+                <Radio className={`w-5 h-5 shrink-0 ${isMicReady ? 'text-[#06D6A0] animate-pulse' : 'text-[#FFBE0B] animate-pulse'}`} />
                 <div className="min-w-0">
                   <div className="text-xs sm:text-sm font-bold text-white">
-                    Dinleniyor · Otomatik Bitiş Aktif
+                    {isMicReady
+                      ? 'Mikrofon Aktif · Şimdi Okuyabilirsiniz'
+                      : 'Mikrofon Hazırlanıyor...'}
                   </div>
                   <div className="text-[11px] text-[#93C5FD] truncate">
                     Metin bittiğinde, uzun sessizlikte veya {maxReadingSeconds} sn dolunca otomatik tamamlanır.

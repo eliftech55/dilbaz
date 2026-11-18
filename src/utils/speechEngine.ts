@@ -1,4 +1,5 @@
-// Robust Web Speech API engine tuned for Desktop & Mobile parity, overlap deduplication, and multi-alternative matching
+// Robust Web Speech API engine tuned for Desktop & Mobile parity, overlap deduplication,
+// multi-alternative matching, and low-latency real microphone envelope tracking.
 
 import { splitWords, wordSimilarity } from './turkishNorm';
 
@@ -13,6 +14,7 @@ export interface SpeechEngineCallbacks {
   targetText?: string;
   onTranscriptChange: (transcript: string, isFinal: boolean) => void;
   onAudioLevelChange?: (level: number) => void;
+  onAudioReady?: () => void;
   onError?: (errorMessage: string) => void;
   onEnd?: () => void;
 }
@@ -48,7 +50,6 @@ function mergeSegmentsWithoutOverlap(prev: string, next: string): string {
   if (!cleanPrev) return cleanNext;
   if (!cleanNext) return cleanPrev;
 
-  const prevTokens = cleanPrev.split(/\s+/);
   const nextTokens = cleanNext.split(/\s+/);
   const prevUnits = buildNormUnits(cleanPrev);
   const nextUnits = buildNormUnits(cleanNext);
@@ -61,7 +62,7 @@ function mergeSegmentsWithoutOverlap(prev: string, next: string): string {
       for (let i = 0; i < k; i++) {
         const a = prevUnits[prevUnits.length - k + i].norm;
         const b = nextUnits[i].norm;
-        if (a !== b && wordSimilarity(a, b) < 0.82) {
+        if (a !== b && wordSimilarity(a, b) < 0.8) {
           matched = false;
           break;
         }
@@ -84,7 +85,7 @@ function mergeSegmentsWithoutOverlap(prev: string, next: string): string {
         for (let i = 0; i < nextUnits.length; i++) {
           const a = prevUnits[start + i].norm;
           const b = nextUnits[i].norm;
-          if (a !== b && wordSimilarity(a, b) < 0.85) {
+          if (a !== b && wordSimilarity(a, b) < 0.84) {
             allMatch = false;
             break;
           }
@@ -114,7 +115,7 @@ function scoreTranscriptAgainstTarget(text: string, targetNormWords: string[]): 
       const sim = wordSimilarity(cw, tw);
       if (sim > maxWordSim) maxWordSim = sim;
     }
-    if (maxWordSim >= 0.68) {
+    if (maxWordSim >= 0.65) {
       matchSum += maxWordSim;
     }
   }
@@ -122,8 +123,8 @@ function scoreTranscriptAgainstTarget(text: string, targetNormWords: string[]): 
 }
 
 /**
- * Evaluates ASR alternatives against the target tongue-twister vocabulary so out-of-vocabulary
- * Turkish tongue-twister words (kept in alt 1..4 on mobile) win over common-word autocorrects.
+ * Evaluates ASR alternatives against the target tongue-twister vocabulary using total matched
+ * coverage (never dividing by length, so full phrases are never beaten by 1-word snippets).
  */
 function pickBestAlternative(result: any, targetNormWords: string[]): string {
   const altCount = Math.min(result?.length || 0, 5);
@@ -132,7 +133,7 @@ function pickBestAlternative(result: any, targetNormWords: string[]): string {
   if (altCount === 1 || targetNormWords.length === 0) return primary;
 
   let bestTranscript = primary;
-  let bestScore = -1;
+  let bestScore = -1e6;
 
   for (let a = 0; a < altCount; a++) {
     const candidate = (result[a]?.transcript || '').trim();
@@ -142,8 +143,9 @@ function pickBestAlternative(result: any, targetNormWords: string[]): string {
     if (candWords.length === 0) continue;
 
     const matchSum = scoreTranscriptAgainstTarget(candidate, targetNormWords);
-    // Small tie-breaker favoring primary hypothesis (a === 0)
-    const score = matchSum / Math.max(1, candWords.length) + (a === 0 ? 0.04 : 0);
+    const unmatchedApprox = Math.max(0, candWords.length - matchSum);
+    // Reward total matched target words while mildly penalizing spurious noise and preferring alt 0 on ties
+    const score = matchSum - unmatchedApprox * 0.14 + (a === 0 ? 0.08 : 0);
     if (score > bestScore) {
       bestScore = score;
       bestTranscript = candidate;
@@ -166,9 +168,18 @@ export class SpeechEngine {
   private firstAudioAt: number = 0;
   private firstSpeechAt: number = 0;
   private lastSpeechAt: number = 0;
-  private segmentMemory: Map<number, { text: string; targetScore: number }> = new Map();
+  private segmentMemory: Map<number, { text: string; targetScore: number; wordCount: number }> =
+    new Map();
   private pendingStopResolver: (() => void) | null = null;
   private isStoppingManually: boolean = false;
+  private audioReadyEmitted: boolean = false;
+
+  // Real-time AnalyserNode metering for zero-latency desktop voice sync
+  private micStream: MediaStream | null = null;
+  private audioCtx: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private meterRafId: number | null = null;
+  private micActive: boolean = false;
 
   public static isSupported(): boolean {
     return (
@@ -191,6 +202,7 @@ export class SpeechEngine {
     this.segmentMemory.clear();
     this.pendingStopResolver = null;
     this.isStoppingManually = false;
+    this.audioReadyEmitted = false;
     this.targetNormWords = callbacks.targetText ? splitWords(callbacks.targetText) : [];
 
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -206,24 +218,13 @@ export class SpeechEngine {
       this.isListening = true;
       this.initRecognitionInstance(SpeechRec, callbacks);
 
-      // Drive audio level smoothly from speech events without opening a competing getUserMedia stream
       if (callbacks.onAudioLevelChange) {
-        this.pulseInterval = setInterval(() => {
-          if (!this.isListening) return;
-          const timeSinceActivity = Date.now() - this.lastActivityAt;
-          if (this.lastActivityAt > 0 && timeSinceActivity < 280) {
-            const wave = Math.sin(Date.now() / 75) * 14;
-            const level = Math.min(98, Math.max(52, Math.round(72 + wave + Math.random() * 14)));
-            callbacks.onAudioLevelChange?.(level);
-          } else if (this.lastActivityAt > 0 && timeSinceActivity < 560) {
-            const decayRatio = 1 - (timeSinceActivity - 280) / 280;
-            const level = Math.round(16 + decayRatio * 34);
-            callbacks.onAudioLevelChange?.(level);
-          } else {
-            const idleLevel = Math.round(8 + Math.random() * 8);
-            callbacks.onAudioLevelChange?.(idleLevel);
-          }
-        }, 85);
+        // On desktop, run a real 60fps AnalyserNode mic meter for zero-latency voice reactivity;
+        // on mobile, keep single-stream SpeechRecognition and drive smooth event-based envelope.
+        if (!isMobileBrowser()) {
+          void this.startRealMicMeter(callbacks);
+        }
+        this.startEventEnvelopeFallback(callbacks);
       }
 
       return true;
@@ -232,6 +233,136 @@ export class SpeechEngine {
       this.isListening = false;
       callbacks.onError?.(err?.message || 'Mikrofon başlatılamadı');
       return false;
+    }
+  }
+
+  private async startRealMicMeter(callbacks: SpeechEngineCallbacks) {
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      if (!this.isListening || this.isStoppingManually) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
+      const winAudio = window as unknown as {
+        AudioContext?: typeof AudioContext;
+        webkitAudioContext?: typeof AudioContext;
+      };
+      const AudioCtx = winAudio.AudioContext || winAudio.webkitAudioContext;
+      if (!AudioCtx) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') {
+        await ctx.resume().catch(() => undefined);
+      }
+
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.52;
+      source.connect(analyser);
+
+      this.micStream = stream;
+      this.audioCtx = ctx;
+      this.analyser = analyser;
+      this.micActive = true;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      let smoothed = 8;
+
+      const tick = () => {
+        if (!this.isListening || !this.analyser) return;
+        this.analyser.getByteTimeDomainData(dataArray);
+
+        let sumSq = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const norm = (dataArray[i] - 128) / 128;
+          sumSq += norm * norm;
+        }
+        const rms = Math.sqrt(sumSq / dataArray.length);
+        // Map typical spoken RMS (0.015 .. 0.25) to responsive 8..100 scale
+        const instant = Math.min(100, Math.max(8, Math.round(rms * 420 + 6)));
+        smoothed = smoothed * 0.45 + instant * 0.55;
+
+        if (instant >= 26) {
+          this.lastActivityAt = Date.now();
+        }
+        callbacks.onAudioLevelChange?.(Math.round(smoothed));
+        this.meterRafId = requestAnimationFrame(tick);
+      };
+
+      this.meterRafId = requestAnimationFrame(tick);
+    } catch {
+      // Silently fall back to speech-event envelope if getUserMedia is unavailable
+      this.micActive = false;
+    }
+  }
+
+  private startEventEnvelopeFallback(callbacks: SpeechEngineCallbacks) {
+    this.pulseInterval = setInterval(() => {
+      if (!this.isListening || this.micActive) return;
+      const timeSinceActivity = Date.now() - this.lastActivityAt;
+      if (this.lastActivityAt > 0 && timeSinceActivity < 320) {
+        const wave = Math.sin(Date.now() / 65) * 14;
+        const level = Math.min(98, Math.max(54, Math.round(74 + wave + Math.random() * 12)));
+        callbacks.onAudioLevelChange?.(level);
+      } else if (this.lastActivityAt > 0 && timeSinceActivity < 620) {
+        const decayRatio = 1 - (timeSinceActivity - 320) / 300;
+        const level = Math.round(14 + decayRatio * 36);
+        callbacks.onAudioLevelChange?.(level);
+      } else {
+        const idleLevel = Math.round(8 + Math.random() * 6);
+        callbacks.onAudioLevelChange?.(idleLevel);
+      }
+    }, 65);
+  }
+
+  private stopMicMeter() {
+    this.micActive = false;
+    if (this.meterRafId !== null) {
+      cancelAnimationFrame(this.meterRafId);
+      this.meterRafId = null;
+    }
+    if (this.micStream) {
+      try {
+        this.micStream.getTracks().forEach((t) => t.stop());
+      } catch {
+        // ignore
+      }
+      this.micStream = null;
+    }
+    if (this.audioCtx) {
+      try {
+        void this.audioCtx.close();
+      } catch {
+        // ignore
+      }
+      this.audioCtx = null;
+    }
+    this.analyser = null;
+  }
+
+  private notifyAudioReady(callbacks: SpeechEngineCallbacks) {
+    if (!this.audioReadyEmitted) {
+      this.audioReadyEmitted = true;
+      callbacks.onAudioReady?.();
     }
   }
 
@@ -249,12 +380,14 @@ export class SpeechEngine {
       const now = Date.now();
       this.lastActivityAt = now;
       if (!this.firstAudioAt) this.firstAudioAt = now;
+      this.notifyAudioReady(callbacks);
     };
 
     recognition.onsoundstart = () => {
       const now = Date.now();
       this.lastActivityAt = now;
       if (!this.firstAudioAt) this.firstAudioAt = now;
+      this.notifyAudioReady(callbacks);
     };
 
     recognition.onspeechstart = () => {
@@ -262,6 +395,7 @@ export class SpeechEngine {
       this.lastActivityAt = now;
       if (!this.firstAudioAt) this.firstAudioAt = now;
       if (!this.firstSpeechAt) this.firstSpeechAt = now;
+      this.notifyAudioReady(callbacks);
     };
 
     recognition.onspeechend = () => {
@@ -276,6 +410,7 @@ export class SpeechEngine {
       const now = Date.now();
       this.lastActivityAt = now;
       if (!this.firstAudioAt) this.firstAudioAt = now;
+      this.notifyAudioReady(callbacks);
 
       let finalBuf = '';
       let interimBuf = '';
@@ -285,16 +420,27 @@ export class SpeechEngine {
         let piece = pickBestAlternative(result, this.targetNormWords);
         if (!piece) continue;
 
-        // Android Chrome 2nd-pass isFinal rescorer often drops or corrupts out-of-vocabulary
-        // tongue-twister words that interim hypotheses recognized correctly. Keep whichever
-        // version has significantly better target coverage for this result index.
+        const pieceWords = splitWords(piece);
+
+        // Protect finalized segments against Android Chrome 2nd-pass rescorer dropping or mangling
+        // out-of-vocabulary tongue-twister words, while NEVER freezing evolving interim hypotheses.
         if (this.targetNormWords.length > 0) {
           const pieceScore = scoreTranscriptAgainstTarget(piece, this.targetNormWords);
           const prevSeg = this.segmentMemory.get(i);
-          if (prevSeg && prevSeg.targetScore > pieceScore + 0.65) {
+
+          if (
+            result.isFinal &&
+            prevSeg &&
+            prevSeg.targetScore > pieceScore + 0.65 &&
+            prevSeg.wordCount >= pieceWords.length
+          ) {
             piece = prevSeg.text;
           } else {
-            this.segmentMemory.set(i, { text: piece, targetScore: pieceScore });
+            this.segmentMemory.set(i, {
+              text: piece,
+              targetScore: pieceScore,
+              wordCount: pieceWords.length
+            });
           }
         }
 
@@ -329,6 +475,7 @@ export class SpeechEngine {
       console.warn('Speech recognition error:', event.error);
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         this.isListening = false;
+        this.stopMicMeter();
         callbacks.onError?.('Mikrofon izni reddedildi. Tarayıcı ayarlarından mikrofon izni verin.');
       } else {
         callbacks.onError?.(`Mikrofon uyarısı: ${event.error}`);
@@ -357,7 +504,7 @@ export class SpeechEngine {
       }
 
       if (this.isListening && !this.isStoppingManually) {
-        const restartDelay = isMobileBrowser() ? 140 : 60;
+        const restartDelay = isMobileBrowser() ? 110 : 40;
         setTimeout(() => {
           if (this.isListening && !this.isStoppingManually) {
             try {
@@ -373,7 +520,11 @@ export class SpeechEngine {
     };
 
     this.recognition = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+    } catch {
+      // Handle transient start race cleanly
+    }
   }
 
   public getLatestTranscript(): string {
@@ -414,9 +565,6 @@ export class SpeechEngine {
     };
   }
 
-  /**
-   * Returns an effective start timestamp compensated for mobile microphone initialization lag.
-   */
   public getEffectiveStartTime(fallbackStartMs: number): number {
     return this.getSpeakingBounds(fallbackStartMs).startMs;
   }
@@ -433,6 +581,7 @@ export class SpeechEngine {
     const waitMs = maxWaitMs ?? (isMobileBrowser() ? 380 : 160);
     this.isStoppingManually = true;
     this.isListening = false;
+    this.stopMicMeter();
 
     if (this.pulseInterval) {
       clearInterval(this.pulseInterval);
@@ -475,6 +624,7 @@ export class SpeechEngine {
     this.isStoppingManually = true;
     this.isListening = false;
     this.pendingStopResolver = null;
+    this.stopMicMeter();
 
     if (this.pulseInterval) {
       clearInterval(this.pulseInterval);
