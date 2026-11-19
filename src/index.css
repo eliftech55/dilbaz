@@ -452,6 +452,68 @@
     0 6px 14px rgba(0, 0, 0, 0.3);
 }
 
+/* Cinematic Intro Splash Utilities */
+@keyframes cinemaKenBurns {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: scale(1.07) translate3d(-1%, -0.8%, 0);
+  }
+  100% {
+    transform: scale(1.03) translate3d(1%, 0.5%, 0);
+  }
+}
+
+@keyframes cinemaShimmerSweep {
+  0% {
+    transform: translateX(-140%) skewX(-18deg);
+  }
+  100% {
+    transform: translateX(240%) skewX(-18deg);
+  }
+}
+
+@keyframes cinemaCurtainIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.965) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes cinemaBeatUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-cinema-ken-burns {
+  animation: cinemaKenBurns 18s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.animate-cinema-shimmer {
+  animation: cinemaShimmerSweep 3.2s cubic-bezier(0.25, 0.8, 0.25, 1) infinite;
+  will-change: transform;
+}
+
+.animate-cinema-curtain {
+  animation: cinemaCurtainIn 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-cinema-beat {
+  animation: cinemaBeatUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-phoenix-float,
   .animate-phoenix-wing-left,
@@ -459,7 +521,11 @@
   .animate-phoenix-bird-flap,
   .animate-relic-halo,
   .animate-relic-ember,
-  .animate-relic-talisman {
+  .animate-relic-talisman,
+  .animate-cinema-ken-burns,
+  .animate-cinema-shimmer,
+  .animate-cinema-curtain,
+  .animate-cinema-beat {
     animation: none !important;
   }
 }

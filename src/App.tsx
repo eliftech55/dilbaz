@@ -1347,7 +1347,7 @@ export default function App() {
   ]);
 
   return (
-    <div className="relative min-h-screen text-[#F8FAFC] flex flex-col">
+    <div className="relative min-h-[100dvh] text-[#F8FAFC] flex flex-col">
       <EbruBackground />
       <FxCanvas />
 
@@ -1755,7 +1755,7 @@ export default function App() {
       </main>
 
       {/* Mobile Fixed Bottom Navigation Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0d1629]/95 backdrop-blur-md border-t border-white/10 grid grid-cols-5 items-center h-14 px-1">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0d1629]/95 backdrop-blur-md border-t border-white/10 grid grid-cols-5 items-center min-h-[3.5rem] pb-[env(safe-area-inset-bottom)] px-1">
         <button
           onClick={() => {
             playTone('tap');

@@ -1,6 +1,7 @@
-// Dilbaz Service Worker — Offline shell, Web Push (when app/APK is closed), app icon badge & sound
-const CACHE_NAME = 'dilbaz-shell-v5';
+// Dilbaz Service Worker — Resilient mobile PWA shell, offline recovery, Web Push, app icon badge & sound
+const CACHE_NAME = 'dilbaz-shell-v6';
 const PRECACHE_ASSETS = [
+  './',
   './manifest.webmanifest',
   './pwa-192x192.png',
   './pwa-512x512.png',
@@ -34,6 +35,22 @@ async function syncServiceWorkerBadge(count) {
   return false;
 }
 
+function fetchWithTimeout(request, timeoutMs) {
+  const controller = new AbortController();
+  const timerId = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(request, { signal: controller.signal }).finally(() => clearTimeout(timerId));
+}
+
+function createOfflineRecoveryHtml() {
+  return new Response(
+    '<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Dilbaz</title><style>body{margin:0;min-height:100dvh;display:flex;align-items:center;justify-content:center;background:#0d1629;color:#f8fafc;font-family:system-ui,-apple-system,sans-serif;padding:24px;text-align:center}.card{max-width:360px;background:#14213d;border:1px solid rgba(255,190,11,.35);border-radius:24px;padding:28px 22px;box-shadow:0 20px 50px rgba(0,0,0,.5)}h1{margin:0 0 8px;font-size:20px;color:#ffbe0b}p{margin:0 0 18px;font-size:14px;line-height:1.5;color:#cbd5e1}button{width:100%;border:0;border-radius:14px;padding:12px 16px;font-weight:700;font-size:14px;background:linear-gradient(135deg,#ff006e,#ffbe0b);color:#fff;cursor:pointer}</style></head><body><div class="card"><h1>Dilbaz Bağlantı Bekliyor</h1><p>Uygulama kabuğu şu an ağa erişemiyor. İnternet bağlantınızı kontrol edip yeniden deneyin.</p><button onclick="window.location.reload()">Tekrar Dene</button></div></body></html>',
+    {
+      status: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' }
+    }
+  );
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -64,26 +81,66 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/.well-known/')) return;
+  if (req.headers.has('range')) return;
+
+  const scopeRootUrl = new URL('./', self.registration.scope).href;
 
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
+      (async () => {
+        try {
+          const res = await fetchWithTimeout(req, 4500);
           if (res && res.ok) {
             const ct = res.headers.get('content-type') || '';
             if (ct.includes('text/html')) {
-              const copy = res.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => undefined);
+              const cache = await caches.open(CACHE_NAME);
+              await Promise.all([
+                cache.put(req, res.clone()).catch(() => undefined),
+                cache.put(scopeRootUrl, res.clone()).catch(() => undefined)
+              ]);
+            }
+            return res;
+          }
+          if (res && res.status < 500) {
+            return res;
+          }
+        } catch {
+          // Network offline or stalled: fall back to cache below
+        }
+
+        const cachedExact = await caches.match(req);
+        if (cachedExact) return cachedExact;
+        const cachedRoot = await caches.match(scopeRootUrl);
+        if (cachedRoot) return cachedRoot;
+        return createOfflineRecoveryHtml();
+      })()
+    );
+    return;
+  }
+
+  // Cache hashed build assets (/assets/*.js, /assets/*.css, images) safely without ever caching HTML error responses
+  if (
+    url.pathname.startsWith('/assets/') &&
+    !/\.(mp4|webm)$/i.test(url.pathname)
+  ) {
+    event.respondWith(
+      (async () => {
+        const cached = await caches.match(req);
+        if (cached) return cached;
+        try {
+          const res = await fetch(req);
+          if (res && res.ok) {
+            const ct = res.headers.get('content-type') || '';
+            if (!ct.includes('text/html')) {
+              const cache = await caches.open(CACHE_NAME);
+              cache.put(req, res.clone()).catch(() => undefined);
             }
           }
           return res;
-        })
-        .catch(async () => {
-          const cached = await caches.match(req);
-          if (cached) return cached;
-          const fallback = await caches.match(new URL('./', self.registration.scope).href);
-          return fallback || Response.error();
-        })
+        } catch {
+          return cached || Response.error();
+        }
+      })()
     );
   }
 });

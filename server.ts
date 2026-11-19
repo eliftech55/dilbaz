@@ -379,8 +379,30 @@ app.post('/api/push/notify', async (req, res) => {
 async function startServer() {
   if (process.env.NODE_ENV === 'production') {
     const distPath = path.join(__dirname, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
+    app.use(
+      express.static(distPath, {
+        setHeaders(res, filePath) {
+          if (
+            filePath.endsWith('.html') ||
+            filePath.endsWith('sw.js') ||
+            filePath.endsWith('.webmanifest')
+          ) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          }
+        }
+      })
+    );
+    app.get('*', (req, res) => {
+      if (
+        req.path.startsWith('/assets/') ||
+        /\.(js|mjs|css|png|jpg|jpeg|webp|svg|ico|woff2?|mp4|wav|json|webmanifest)$/i.test(req.path)
+      ) {
+        res.status(404).end();
+        return;
+      }
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   } else {

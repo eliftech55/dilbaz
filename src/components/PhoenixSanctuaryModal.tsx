@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { UserProfile } from '../types/game';
 import {
   PhoenixComputedState,
@@ -9,8 +9,11 @@ import {
   upgradeRelicRank
 } from '../utils/phoenixProgression';
 import { resolveEquippedVisuals } from './PhoenixEquippedVisuals';
-import { Phoenix3DViewer } from './Phoenix3DViewer';
 import { playTone } from '../utils/soundEffects';
+
+const Phoenix3DViewer = React.lazy(() =>
+  import('./Phoenix3DViewer').then((m) => ({ default: m.Phoenix3DViewer }))
+);
 import {
   X,
   Sparkles,
@@ -246,26 +249,37 @@ export const PhoenixSanctuaryModal: React.FC<PhoenixSanctuaryModalProps> = ({
 
         {/* 3D Interactive Character & Relic Preview Viewport */}
         <div className="space-y-3">
-          <Phoenix3DViewer
-            level={phoenix.level}
-            stageName={phoenix.stage.name}
-            auraId={effective3D.auraId}
-            auraRank={effective3D.auraRank}
-            talismanId={effective3D.talismanId}
-            talismanRank={effective3D.talismanRank}
-            crestId={effective3D.crestId}
-            crestRank={effective3D.crestRank}
-            featherPaletteId={effective3D.featherPaletteId}
-            wingPatternId={effective3D.wingPatternId}
-            isPreviewing={isPreviewingAny}
-            previewItemName={previewTitleParts.join(' · ') || null}
-            onResetPreview={() => {
-              playTone('tap');
-              setPreviewRelicId(null);
-              setPreviewPaletteId(null);
-              setPreviewPatternId(null);
-            }}
-          />
+          <Suspense
+            fallback={
+              <div className="w-full h-[280px] sm:h-[340px] rounded-2xl bg-[#0d1629]/85 border border-white/10 flex flex-col items-center justify-center gap-2.5">
+                <div className="w-8 h-8 rounded-full border-2 border-[#FFBE0B]/30 border-t-[#FFBE0B] animate-spin" />
+                <span className="text-xs font-semibold text-[#93C5FD]">
+                  3D Zümrüdüanka hazırlanıyor...
+                </span>
+              </div>
+            }
+          >
+            <Phoenix3DViewer
+              level={phoenix.level}
+              stageName={phoenix.stage.name}
+              auraId={effective3D.auraId}
+              auraRank={effective3D.auraRank}
+              talismanId={effective3D.talismanId}
+              talismanRank={effective3D.talismanRank}
+              crestId={effective3D.crestId}
+              crestRank={effective3D.crestRank}
+              featherPaletteId={effective3D.featherPaletteId}
+              wingPatternId={effective3D.wingPatternId}
+              isPreviewing={isPreviewingAny}
+              previewItemName={previewTitleParts.join(' · ') || null}
+              onResetPreview={() => {
+                playTone('tap');
+                setPreviewRelicId(null);
+                setPreviewPaletteId(null);
+                setPreviewPatternId(null);
+              }}
+            />
+          </Suspense>
 
           {/* Dynamic Feather Palette & Wing Pattern Customizer */}
           <div className="p-3 rounded-2xl bg-[#0d1629]/85 border border-white/12 space-y-3">
