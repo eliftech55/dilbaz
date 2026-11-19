@@ -409,14 +409,75 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   } else {
-    const disableHmr = process.env.DISABLE_HMR === 'true';
+    if (process.env.ENABLE_HMR !== 'true' && !process.env.DISABLE_HMR) {
+      process.env.DISABLE_HMR = 'true';
+    }
+    const enableHmr = process.env.ENABLE_HMR === 'true' && process.env.DISABLE_HMR !== 'true';
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: disableHmr ? false : { server: httpServer },
+        hmr: enableHmr ? { server: httpServer } : false,
       },
       appType: 'spa',
     });
+
+    if (!enableHmr) {
+      app.get('/@vite/client', (_req, res) => {
+        res.type('application/javascript');
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(`
+const sheetsMap = new Map();
+let lastInsertedStyle;
+export function updateStyle(id, content) {
+  let style = sheetsMap.get(id);
+  if (!style) {
+    style = document.createElement('style');
+    style.setAttribute('type', 'text/css');
+    style.setAttribute('data-vite-dev-id', id);
+    style.textContent = content;
+    if (!lastInsertedStyle) {
+      document.head.appendChild(style);
+      setTimeout(() => { lastInsertedStyle = undefined; }, 0);
+    } else {
+      lastInsertedStyle.insertAdjacentElement('afterend', style);
+    }
+    lastInsertedStyle = style;
+  } else if (style.textContent !== content) {
+    style.textContent = content;
+  }
+  sheetsMap.set(id, style);
+}
+export function removeStyle(id) {
+  const style = sheetsMap.get(id);
+  if (style && style.parentNode) {
+    style.parentNode.removeChild(style);
+    sheetsMap.delete(id);
+  }
+}
+export function createHotContext() {
+  return {
+    data: {},
+    accept() {},
+    dispose() {},
+    prune() {},
+    decline() {},
+    invalidate() {},
+    on() {},
+    off() {},
+    send() {},
+  };
+}
+export function injectQuery(url, queryToInject) {
+  if (url[0] !== '.' && url[0] !== '/') return url;
+  const pathname = url.replace(/[?#].*$/, '');
+  const { search, hash } = new URL(url, 'http://vite.dev');
+  return pathname + '?' + queryToInject + (search ? '&' + search.slice(1) : '') + (hash || '');
+}
+export class ErrorOverlay {}
+`);
+      });
+    }
+
     app.use(vite.middlewares);
   }
 
