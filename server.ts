@@ -183,7 +183,7 @@ app.get('/.well-known/assetlinks.json', (_req, res) => {
       // fall through
     }
   }
-  const pkg = (process.env.ANDROID_PACKAGE_NAME || '').trim();
+  const pkg = (process.env.ANDROID_PACKAGE_NAME || 'com.dilbazdiksiyon.app').trim();
   const fp = (process.env.ANDROID_SHA256_FINGERPRINT || '').trim();
   if (pkg && fp) {
     res.json([
